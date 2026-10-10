@@ -24,7 +24,7 @@
     }
 
     .preview-container {
-        transform: scale(0.85); /* 稍微放大預覽圖 */
+        transform: scale(0.85);
         transform-origin: top center;
         margin-bottom: -15mm;
     }
@@ -90,7 +90,7 @@
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">物品名稱</label>
           <div class="flex gap-2">
-            <input type="text" id="itemName" value="枕頭心" class="flex-1 p-2 border rounded border-gray-300" oninput="updatePreview()">
+            <input type="text" id="itemName" value="薄被" class="flex-1 p-2 border rounded border-gray-300" oninput="updatePreview()">
             <input type="number" id="itemNameSize" value="36" class="w-20 p-2 border rounded border-gray-300" oninput="updatePreview()" title="字體大小(px)">
             <span class="py-2 text-sm text-gray-500">px</span>
           </div>
@@ -98,11 +98,11 @@
         <div class="flex gap-4">
           <div class="flex-1 p-3 border-2 border-yellow-400 bg-yellow-50 rounded-lg relative">
             <span class="absolute -top-3 left-2 bg-yellow-400 text-xs px-2 py-1 rounded font-bold text-yellow-900">⭐ 本櫃應備數</span>
-            <input type="text" id="cabinetQty" value="20" class="w-full p-2 mt-2 text-xl font-bold text-center border rounded" oninput="updatePreview()">
+            <input type="text" id="cabinetQty" value="9" class="w-full p-2 mt-2 text-xl font-bold text-center border rounded" oninput="updatePreview()">
           </div>
           <div class="flex-1 p-3 border border-gray-300 bg-gray-50 rounded-lg">
             <label class="block font-bold text-gray-700 mb-1 text-sm text-center">全區總庫存</label>
-            <input type="text" id="totalQty" value="97" class="w-full p-2 text-xl font-bold text-center border rounded" oninput="updatePreview()">
+            <input type="text" id="totalQty" value="17" class="w-full p-2 text-xl font-bold text-center border rounded" oninput="updatePreview()">
           </div>
         </div>
       </div>
@@ -144,6 +144,26 @@
         </div>
       </div>
 
+      <!-- 折疊方式說明 (可折疊) -->
+      <div class="border border-indigo-200 p-4 rounded-lg bg-indigo-50">
+        <div class="flex justify-between items-center mb-2">
+          <label class="font-bold text-indigo-700 cursor-pointer flex items-center gap-2" onclick="toggleSection('foldSection')">
+              折疊方式說明 <span id="foldSectionIcon" class="text-indigo-500 text-sm">▼</span>
+          </label>
+          <label class="flex items-center gap-1 text-sm cursor-pointer text-indigo-700">
+            <input type="checkbox" id="showFold" checked onchange="updatePreview()"> 顯示區塊
+          </label>
+        </div>
+        <div id="foldSection" class="transition-all duration-300">
+            <div id="foldContainer">
+              <div class="flex gap-2 mb-2">
+                 <input type="text" id="foldNote" value="將薄被對折再對折後平放" class="flex-1 p-2 border rounded border-indigo-300" oninput="updatePreview()">
+                 <input type="number" id="foldSize" value="18" class="w-16 p-2 border rounded border-indigo-300" oninput="updatePreview()" title="字體大小(px)">
+              </div>
+            </div>
+        </div>
+      </div>
+
       <!-- 提醒 (可折疊) -->
       <div class="border border-red-200 p-4 rounded-lg bg-red-50">
         <div class="flex justify-between items-center mb-2">
@@ -157,8 +177,8 @@
         <div id="noteSection" class="transition-all duration-300">
             <div id="noteContainer">
               <div class="flex gap-2 mb-2">
-                 <input type="text" id="specialNote" value="枕頭心要先套枕頭套後再收納" class="flex-1 p-2 border rounded border-red-300" oninput="updatePreview()">
-                 <input type="number" id="noteSize" value="18" class="w-16 p-2 border rounded border-red-300" oninput="updatePreview()">
+                 <input type="text" id="specialNote" value="請晾曬後再收納" class="flex-1 p-2 border rounded border-red-300" oninput="updatePreview()">
+                 <input type="number" id="noteSize" value="18" class="w-16 p-2 border rounded border-red-300" oninput="updatePreview()" title="字體大小(px)">
               </div>
             </div>
         </div>
@@ -174,7 +194,7 @@
   <!-- 右側區域：預覽與清單比例調整 -->
   <div class="w-2/3 h-full bg-gray-200 flex flex-col print:w-full print:h-auto print:hidden">
     
-    <!-- 上半部：即時預覽 (加大比例 70%) -->
+    <!-- 上半部：即時預覽 -->
     <div class="flex-grow flex flex-col" style="flex-basis: 70%;">
         <div class="p-3 bg-gray-800 text-white font-bold shrink-0">👁️ 即時預覽 (Live Preview)</div>
         <div class="flex-1 overflow-y-auto p-4 flex justify-center bg-gray-300">
@@ -187,7 +207,7 @@
     <!-- 分隔線 -->
     <div class="h-1 bg-gray-400 shrink-0 shadow-inner"></div>
 
-    <!-- 下半部：完成清單區 (縮小比例 30%) -->
+    <!-- 下半部：完成清單區 -->
     <div class="flex flex-col bg-white border-t" style="flex-basis: 30%; min-height: 200px;">
         <div class="p-2 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center text-sm">
             <span>✅ 完成標籤清單</span>
@@ -212,14 +232,11 @@
 
 <script>
   let orderData = [
-    { text: "立櫃 01-中 (補貨區)", isTarget: true },
-    { text: "立櫃 02-下 (主儲位)", isTarget: false },
-    { text: "立櫃 02-上 (高處儲位)", isTarget: false },
-    { text: "活動立櫃-2左 (自助取用櫃)", isTarget: false }
+    { text: "立櫃 01-上 (本櫃)", isTarget: true },
+    { text: "矮櫃 04-右", isTarget: false }
   ];
   let locData = [
-    { name: "立櫃 02-上", qty: "32件" },
-    { name: "立櫃 02-下", qty: "42件" }
+    { name: "矮櫃 04-右", qty: "8件" }
   ];
   let importedData = [];
   let completedLabels = [];
@@ -249,10 +266,17 @@
     const cabinetQty = document.getElementById('cabinetQty').value;
     const totalQty = document.getElementById('totalQty').value;
     const imgSrc = document.getElementById('imageUpload').dataset.src || document.getElementById('imageUrl').value || 'https://via.placeholder.com/400x200?text=無圖片';
+    
     const showNote = document.getElementById('showNote').checked;
     const specialNote = document.getElementById('specialNote').value;
     const noteSize = document.getElementById('noteSize').value;
     document.getElementById('noteContainer').style.display = showNote ? 'block' : 'none';
+
+    const showFold = document.getElementById('showFold').checked;
+    const foldNote = document.getElementById('foldNote').value;
+    const foldSize = document.getElementById('foldSize').value;
+    document.getElementById('foldContainer').style.display = showFold ? 'block' : 'none';
+
     const showOtherLocs = document.getElementById('showOtherLocs').checked;
     document.getElementById('otherLocsContainer').style.display = showOtherLocs ? 'block' : 'none';
 
@@ -291,6 +315,12 @@
                 <span class="text-blue-600 text-3xl font-black">${totalQty} <span class="text-lg">件</span></span>
               </div>
             </div>
+            ${showFold ? `
+            <div class="bg-indigo-50 border-2 border-indigo-400 text-indigo-700 rounded-lg p-3 shrink-0">
+              <div class="font-black flex items-center gap-2 mb-1"><span class="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">📏</span> 折疊說明</div>
+              <div class="font-bold" style="font-size: ${foldSize}px; line-height: 1.3;">${foldNote}</div>
+            </div>
+            ` : ''}
             ${showNote ? `
             <div class="bg-red-50 border-2 border-red-400 text-red-700 rounded-lg p-3 shrink-0">
               <div class="font-black flex items-center gap-2 mb-1"><span class="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">!</span> 收納提醒</div>
@@ -486,7 +516,8 @@
         });
         sel.classList.remove('hidden');
         alert(`成功匯入 ${json.length} 筆資料！`);
-      } catch (err) { alert("讀取 Excel 失敗。\n錯誤訊息: " + err.message); }
+      } catch (err) { alert("讀取 Excel 失敗。
+錯誤訊息: " + err.message); }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -502,7 +533,8 @@
     let otherStr = data['其他櫃位與數量'] || data['其他儲放櫃位與數量'] || '';
     locData = [];
     if(otherStr && !otherStr.includes('無其他')) {
-      const parts = otherStr.split('\n');
+      const parts = otherStr.split('
+');
       parts.forEach(p => {
         let sp = p.split(/：|:/);
         if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
