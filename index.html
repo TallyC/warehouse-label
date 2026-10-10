@@ -24,9 +24,9 @@
     }
 
     .preview-container {
-        transform: scale(0.8);
+        transform: scale(0.85); /* 稍微放大預覽圖 */
         transform-origin: top center;
-        margin-bottom: -30mm; /* 縮放後補回空間 */
+        margin-bottom: -15mm;
     }
 
     .drag-handle { cursor: grab; }
@@ -55,7 +55,7 @@
       }
       .label-card {
         box-shadow: none;
-        border: 1px dashed #ccc; /* 裁切線 */
+        border: 1px dashed #ccc;
         margin: 0;
       }
     }
@@ -114,40 +114,53 @@
         <input type="text" id="imageUrl" placeholder="或貼上圖片網址" class="w-full p-2 border rounded text-sm" oninput="updateImageFromUrl()">
       </div>
 
-      <!-- 收納順序 -->
+      <!-- 收納順序 (可折疊) -->
       <div class="border p-4 rounded-lg">
-        <label class="block font-bold text-gray-700 mb-2">歸位收納順序 (可拖曳排序)</label>
-        <ul id="orderList" class="space-y-2"></ul>
-        <button onclick="addOrderRow()" class="mt-2 text-sm text-teal-600 font-bold hover:underline">+ 新增步驟</button>
+        <div class="flex justify-between items-center mb-2 cursor-pointer" onclick="toggleSection('orderSection')">
+           <label class="font-bold text-gray-700 cursor-pointer">歸位收納順序 (可拖曳排序)</label>
+           <span id="orderSectionIcon" class="text-gray-500">▼</span>
+        </div>
+        <div id="orderSection" class="transition-all duration-300">
+            <ul id="orderList" class="space-y-2"></ul>
+            <button onclick="addOrderRow()" class="mt-2 text-sm text-teal-600 font-bold hover:underline">+ 新增步驟</button>
+        </div>
       </div>
 
-      <!-- 其他儲放區 -->
+      <!-- 其他儲放區 (可折疊) -->
       <div class="border p-4 rounded-lg bg-gray-50">
         <div class="flex justify-between items-center mb-2">
-          <label class="font-bold text-gray-700">其他儲放區</label>
+          <label class="font-bold text-gray-700 cursor-pointer flex items-center gap-2" onclick="toggleSection('locSection')">
+              其他儲放區 <span id="locSectionIcon" class="text-gray-500 text-sm">▼</span>
+          </label>
           <label class="flex items-center gap-1 text-sm cursor-pointer">
             <input type="checkbox" id="showOtherLocs" checked onchange="updatePreview()"> 顯示區塊
           </label>
         </div>
-        <div id="otherLocsContainer">
-          <ul id="locList" class="space-y-2"></ul>
-          <button onclick="addLocRow()" class="mt-2 text-sm text-blue-600 font-bold hover:underline">+ 新增儲位</button>
+        <div id="locSection" class="transition-all duration-300">
+            <div id="otherLocsContainer">
+              <ul id="locList" class="space-y-2"></ul>
+              <button onclick="addLocRow()" class="mt-2 text-sm text-blue-600 font-bold hover:underline">+ 新增儲位</button>
+            </div>
         </div>
       </div>
 
-      <!-- 提醒 -->
+      <!-- 提醒 (可折疊) -->
       <div class="border border-red-200 p-4 rounded-lg bg-red-50">
         <div class="flex justify-between items-center mb-2">
-          <label class="font-bold text-red-700">收納特別提醒</label>
+          <label class="font-bold text-red-700 cursor-pointer flex items-center gap-2" onclick="toggleSection('noteSection')">
+              收納特別提醒 <span id="noteSectionIcon" class="text-red-500 text-sm">▼</span>
+          </label>
           <label class="flex items-center gap-1 text-sm cursor-pointer text-red-700">
             <input type="checkbox" id="showNote" checked onchange="updatePreview()"> 顯示區塊
           </label>
         </div>
-        <div id="noteContainer">
-          <div class="flex gap-2 mb-2">
-             <input type="text" id="specialNote" value="枕頭心要先套枕頭套後再收納" class="flex-1 p-2 border rounded border-red-300" oninput="updatePreview()">
-             <input type="number" id="noteSize" value="18" class="w-16 p-2 border rounded border-red-300" oninput="updatePreview()">
-          </div>
+        <div id="noteSection" class="transition-all duration-300">
+            <div id="noteContainer">
+              <div class="flex gap-2 mb-2">
+                 <input type="text" id="specialNote" value="枕頭心要先套枕頭套後再收納" class="flex-1 p-2 border rounded border-red-300" oninput="updatePreview()">
+                 <input type="number" id="noteSize" value="18" class="w-16 p-2 border rounded border-red-300" oninput="updatePreview()">
+              </div>
+            </div>
         </div>
       </div>
 
@@ -158,11 +171,11 @@
     </div>
   </div>
 
-  <!-- 右側區域：上半部預覽，下半部清單 -->
+  <!-- 右側區域：預覽與清單比例調整 -->
   <div class="w-2/3 h-full bg-gray-200 flex flex-col print:w-full print:h-auto print:hidden">
     
-    <!-- 上半部：即時預覽 -->
-    <div class="h-1/2 flex flex-col">
+    <!-- 上半部：即時預覽 (加大比例 70%) -->
+    <div class="flex-grow flex flex-col" style="flex-basis: 70%;">
         <div class="p-3 bg-gray-800 text-white font-bold shrink-0">👁️ 即時預覽 (Live Preview)</div>
         <div class="flex-1 overflow-y-auto p-4 flex justify-center bg-gray-300">
             <div class="preview-container">
@@ -174,20 +187,20 @@
     <!-- 分隔線 -->
     <div class="h-1 bg-gray-400 shrink-0 shadow-inner"></div>
 
-    <!-- 下半部：完成清單區 -->
-    <div class="h-1/2 flex flex-col bg-white">
-        <div class="p-3 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center">
+    <!-- 下半部：完成清單區 (縮小比例 30%) -->
+    <div class="flex flex-col bg-white border-t" style="flex-basis: 30%; min-height: 200px;">
+        <div class="p-2 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center text-sm">
             <span>✅ 完成標籤清單</span>
             <div class="space-x-2">
-                <button onclick="batchPrint()" class="bg-teal-500 hover:bg-teal-600 px-3 py-1 rounded text-sm shadow text-white font-bold">🖨️ 批次列印 (雙拼連續頁)</button>
-                <button onclick="clearQueue()" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm shadow">清空清單</button>
+                <button onclick="batchPrint()" class="bg-teal-500 hover:bg-teal-600 px-3 py-1 rounded shadow text-white font-bold">🖨️ 批次列印 (雙拼)</button>
+                <button onclick="clearQueue()" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded shadow text-white font-bold">清空清單</button>
             </div>
         </div>
-        <div class="flex-1 overflow-y-auto p-4">
+        <div class="flex-1 overflow-y-auto p-3">
             <div class="mb-2">
                 <label class="cursor-pointer font-bold text-sm text-gray-700"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" checked> 全選</label>
             </div>
-            <div id="queueList" class="space-y-2 border-t pt-2">
+            <div id="queueList" class="space-y-1 border-t pt-2">
                 <div class="text-gray-500 text-sm text-center py-4">目前無完成的標籤，請點擊左側底部「儲存至完成清單」。</div>
             </div>
         </div>
@@ -209,12 +222,24 @@
     { name: "立櫃 02-下", qty: "42件" }
   ];
   let importedData = [];
-  let completedLabels = []; // 存放已完成標籤的陣列
+  let completedLabels = [];
 
   function init() {
     renderOrderList();
     renderLocList();
     updatePreview();
+  }
+  
+  function toggleSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      const icon = document.getElementById(sectionId + 'Icon');
+      if (section.style.display === 'none') {
+          section.style.display = 'block';
+          icon.textContent = '▼';
+      } else {
+          section.style.display = 'none';
+          icon.textContent = '▶';
+      }
   }
 
   function updatePreview() {
@@ -295,7 +320,6 @@
     document.getElementById('livePreview').innerHTML = html;
   }
 
-  /* 拖曳與表單操作保留原本邏輯 */
   let draggedIndex = null;
   function renderOrderList() {
     const list = document.getElementById('orderList');
@@ -356,7 +380,6 @@
     });
   }
 
-  /* ======== 完成清單與批次列印邏輯 ======== */
   function saveLabelToQueue() {
     const html = document.getElementById('livePreview').innerHTML;
     const name = document.getElementById('itemName').value;
@@ -377,7 +400,7 @@
     }
     
     container.innerHTML = completedLabels.map((item, idx) => `
-      <div class="flex items-center justify-between p-3 border-b hover:bg-gray-50">
+      <div class="flex items-center justify-between p-2 border-b hover:bg-gray-50 text-sm">
         <label class="flex items-center gap-3 cursor-pointer flex-1">
             <input type="checkbox" class="queue-checkbox w-4 h-4 text-teal-600" data-idx="${idx}" checked>
             <div>
@@ -385,7 +408,7 @@
                 <span class="font-bold text-gray-700">${item.name}</span>
             </div>
         </label>
-        <button onclick="removeQueueItem(${idx})" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-sm font-bold">刪除</button>
+        <button onclick="removeQueueItem(${idx})" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-bold">刪除</button>
       </div>
     `).join('');
   }
@@ -417,13 +440,11 @@
     const printArea = document.getElementById('print-area');
     printArea.innerHTML = '';
     
-    // 取得所有勾選的 HTML
     const selectedHtmls = Array.from(checkboxes).map(cb => {
         const idx = parseInt(cb.getAttribute('data-idx'));
         return completedLabels[idx].html;
     });
 
-    // 組合 A4 雙拼 (每頁塞 2 張 A5)
     for(let i = 0; i < selectedHtmls.length; i += 2) {
         const page = document.createElement('div');
         page.className = 'print-page';
@@ -444,7 +465,6 @@
     window.print();
   }
 
-  /* ======== Excel 匯入邏輯 ======== */
   function handleExcelUpload(e) {
     const file = e.target.files[0];
     if(!file) return;
