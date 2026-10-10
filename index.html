@@ -163,7 +163,7 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-gray-600 mb-1">標題字級 (px)</label>
-                    <input type="number" id="headerTitleSize" value="14" class="w-full p-1 border rounded" oninput="updatePreview()" title="左上角小標題字級">
+                    <input type="number" id="headerTitleSize" value="14" class="w-full p-1 border rounded" oninput="updatePreview()">
                 </div>
                 <div>
                     <label class="block text-gray-600 mb-1">櫃位字級 (px)</label>
@@ -183,7 +183,7 @@
                 </div>
                 <div>
                     <label class="block text-gray-800 font-bold mb-1">卡片四周留白 (mm)</label>
-                    <input type="number" id="paddingSize" value="6" class="w-full p-1 border border-blue-400 rounded bg-white text-blue-700 font-bold" title="預設6mm，可依需求增減" oninput="updatePreview()">
+                    <input type="number" id="paddingSize" value="6" class="w-full p-1 border border-blue-400 rounded bg-white text-blue-700 font-bold" oninput="updatePreview()">
                 </div>
                 <div class="col-span-2">
                     <label class="block text-gray-800 font-bold mb-1">內部區塊間隙 (Gap)</label>
@@ -202,7 +202,7 @@
         <button onclick="addMultiItemRow()" class="w-full mt-3 py-2 border-2 border-dashed border-blue-400 text-blue-600 font-bold rounded hover:bg-blue-100">+ 手動新增一筆物品</button>
       </div>
 
-      <!-- 圖片上傳 -->
+      <!-- 圖片上傳與編輯 -->
       <div class="border p-4 rounded-lg bg-gray-50">
         <label class="block text-sm font-bold text-gray-700 mb-1 flex justify-between">
             <span>🖼️ 櫃位實景圖 (選填)</span>
@@ -210,7 +210,19 @@
         </label>
         <div id="imageInputSection">
             <input type="file" id="imageUpload" accept="image/*" class="w-full text-sm mb-2" onchange="handleImageUpload(event)">
-            <input type="text" id="imageUrl" placeholder="或貼上圖片網址" class="w-full p-2 border rounded text-sm" oninput="updateImageFromUrl()">
+            <input type="text" id="imageUrl" placeholder="或貼上圖片網址" class="w-full p-2 border rounded text-sm mb-2" oninput="updateImageFromUrl()">
+            
+            <div class="bg-white p-3 border border-gray-200 rounded shadow-sm text-sm space-y-3">
+                <div class="font-bold text-gray-700 border-b pb-1">圖片顯示調整</div>
+                <label class="flex items-center gap-2 cursor-pointer text-indigo-700 font-bold">
+                    <input type="checkbox" id="imageCover" onchange="updatePreview()">
+                    自動填滿區塊 (消除白邊，可能微裁切邊緣)
+                </label>
+                <div class="flex items-center gap-2">
+                    <label class="text-gray-600 whitespace-nowrap">圖片區塊高度:</label>
+                    <input type="number" id="imageHeight" value="220" class="w-20 p-1 border rounded font-bold" oninput="updatePreview()"> px
+                </div>
+            </div>
         </div>
       </div>
 
@@ -228,9 +240,6 @@
             <div id="otherLocsContainer">
               <ul id="locList" class="space-y-2"></ul>
               <button onclick="addLocRow()" class="mt-2 text-sm text-blue-600 font-bold hover:underline">+ 新增櫃位資訊</button>
-            </div>
-            <div id="noLocMsg" class="hidden p-3 bg-gray-200 text-gray-600 rounded text-center font-bold text-sm">
-                此櫃物品為「專屬存放」，無其他備用儲位。
             </div>
         </div>
       </div>
@@ -401,14 +410,11 @@
       else { document.getElementById('noOtherLocsFlag').checked = true; noOtherLocs = true; }
       
       const locContainer = document.getElementById('otherLocsContainer');
-      const noLocMsg = document.getElementById('noLocMsg');
       
       if(noOtherLocs) {
           locContainer.style.display = 'none';
-          noLocMsg.style.display = 'block';
       } else {
           locContainer.style.display = 'block';
-          noLocMsg.style.display = 'none';
       }
       updatePreview();
   }
@@ -429,9 +435,13 @@
     const baseTextSize = document.getElementById('baseTextSize').value || 18;
     const gapSize = document.getElementById('gapSize').value || 20;
 
-    // 圖片
+    // 圖片屬性
     const showImage = document.getElementById('showImage').checked;
     const imgSrc = document.getElementById('imageUpload').dataset.src || document.getElementById('imageUrl').value || 'https://via.placeholder.com/400x200?text=無實景圖';
+    const imgHeight = document.getElementById('imageHeight').value || 220;
+    const imgCover = document.getElementById('imageCover').checked;
+    const imgClass = imgCover ? 'w-full h-full object-cover' : 'max-h-full max-w-full object-contain';
+    
     document.getElementById('imageInputSection').style.display = showImage ? 'block' : 'none';
 
     // 提醒
@@ -470,31 +480,30 @@
 
     // --- 2. 圖片區塊 (mod_image) ---
     let html_image = showImage ? `
-        <div class="shrink-0 h-48 border-2 border-gray-200 rounded-xl p-1 flex items-center justify-center overflow-hidden bg-gray-50">
-            <img src="${imgSrc}" class="max-h-full max-w-full object-contain mix-blend-multiply">
+        <div class="shrink-0 border-2 border-gray-200 rounded-xl p-1 flex items-center justify-center overflow-hidden bg-gray-50" style="height: ${imgHeight}px;">
+            <img src="${imgSrc}" class="${imgClass} mix-blend-multiply rounded-lg">
         </div>
     ` : '';
 
     // --- 3. 其他櫃位數量區塊 (mod_loc) ---
-    let locHtmlInner = "";
-    if (noOtherLocs) {
-        locHtmlInner = `<div class="p-3 bg-gray-100 text-gray-500 rounded border border-gray-200 text-center font-bold" style="font-size: ${baseTextSize}px;">🚫 本櫃限定，無其他儲放區</div>`;
-    } else {
-        locHtmlInner = locData.map(loc => `
+    let html_loc = "";
+    if (!noOtherLocs) {
+        let locHtmlInner = locData.map(loc => `
           <div class="flex justify-between py-2 border-b border-gray-100 last:border-0 text-gray-600" style="font-size: ${baseTextSize}px;">
             <span>${escapeHtml(loc.name)}</span>
             <span class="font-bold">${escapeHtml(loc.qty)}</span>
           </div>
         `).join('');
+
+        html_loc = `
+            <div class="border-2 border-gray-200 rounded-xl p-4 shrink-0 flex flex-col min-h-0">
+              <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0" style="font-size: ${baseTextSize}px;">
+                🔍 其他櫃位數量
+              </div>
+              <div class="no-scrollbar overflow-y-auto pr-1">${locHtmlInner}</div>
+            </div>
+        `;
     }
-    let html_loc = `
-        <div class="border-2 border-gray-200 rounded-xl p-4 shrink-0 flex flex-col min-h-0 ${noOtherLocs ? 'bg-gray-50 border-dashed' : ''}">
-          <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0" style="font-size: ${baseTextSize}px;">
-            🔍 其他櫃位數量
-          </div>
-          <div class="no-scrollbar overflow-y-auto pr-1">${locHtmlInner}</div>
-        </div>
-    `;
 
     // --- 4. 提醒與說明區塊 (mod_note) ---
     let noteInner = '';
@@ -574,21 +583,53 @@
   function updateLocName(idx, val) { locData[idx].name = val; updatePreview(); }
   function updateLocQty(idx, val) { locData[idx].qty = val; updatePreview(); }
 
+  // 圖片壓縮邏輯以確保 json 能正常存取不當機
   function handleImageUpload(e) {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = function(evt) { document.getElementById('imageUpload').dataset.src = evt.target.result; updatePreview(); };
+      reader.onload = function(evt) { 
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                }
+            } else {
+                if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            document.getElementById('imageUpload').dataset.src = dataUrl; 
+            updatePreview();
+        };
+        img.src = evt.target.result;
+      };
       reader.readAsDataURL(file);
     }
   }
+
   function updateImageFromUrl() {
     document.getElementById('imageUpload').dataset.src = document.getElementById('imageUrl').value.trim();
     updatePreview();
   }
 
   function downloadPreviewPNG() {
-    html2canvas(document.getElementById('livePreview'), { scale: 2 }).then(canvas => {
+    html2canvas(document.getElementById('livePreview'), { scale: 2, useCORS: true }).then(canvas => {
       const link = document.createElement('a');
       link.download = document.getElementById('cabinetName').value + '_標籤.png';
       link.href = canvas.toDataURL('image/png');
@@ -615,6 +656,8 @@
       rightColLayout: Array.from(document.getElementById('rightColConfig').children).filter(e=>e.id && e.id.startsWith('mod_')).map(e=>e.id),
       multiItems: JSON.parse(JSON.stringify(multiItems)),
       showImage: document.getElementById('showImage').checked,
+      imageCover: document.getElementById('imageCover').checked,
+      imageHeight: document.getElementById('imageHeight').value,
       imageSrc: document.getElementById('imageUpload').dataset.src || '',
       imageUrl: document.getElementById('imageUrl').value,
       noOtherLocs: document.getElementById('noOtherLocsFlag').checked,
@@ -666,12 +709,15 @@
     renderMultiItems();
 
     document.getElementById('showImage').checked = state.showImage;
+    if(state.imageCover !== undefined) document.getElementById('imageCover').checked = state.imageCover;
+    if(state.imageHeight) document.getElementById('imageHeight').value = state.imageHeight;
+
     if (state.imageSrc) {
       document.getElementById('imageUpload').dataset.src = state.imageSrc;
     } else {
-      delete document.getElementById('imageUpload').dataset.src;
+      document.getElementById('imageUpload').removeAttribute('data-src');
     }
-    document.getElementById('imageUrl').value = state.imageUrl;
+    document.getElementById('imageUrl').value = state.imageUrl || '';
 
     document.getElementById('noOtherLocsFlag').checked = state.noOtherLocs;
     locData = JSON.parse(JSON.stringify(state.locData));
@@ -689,7 +735,7 @@
     renderQueueList();
     updatePreview();
     
-    document.querySelector('.w-1\\/3.overflow-y-auto').scrollTo(0,0);
+    document.querySelector('.w-1\/3.overflow-y-auto').scrollTo(0,0);
   }
 
   function renderQueueList() {
@@ -815,10 +861,20 @@
       try {
           const res = await fetch(url);
           if(!res.ok) throw new Error("網路連線失敗或網址不正確");
-          const arrayBuffer = await res.arrayBuffer();
-          const workbook = XLSX.read(arrayBuffer, {type: 'array'});
-          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-          const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+          const text = await res.text();
+          
+          const lines = text.split('\n');
+          const headers = lines[0].split(',');
+          const json = [];
+          for(let i=1; i<lines.length; i++) {
+              if(!lines[i].trim()) continue;
+              const cols = lines[i].split(',');
+              const obj = {};
+              headers.forEach((h, j) => {
+                  obj[h.trim()] = cols[j] ? cols[j].trim() : '';
+              });
+              json.push(obj);
+          }
           processImportedJson(json);
       } catch (err) {
           alert("雲端讀取失敗。請確認連結是否為發布的 CSV 格式。\n錯誤細節：" + err.message);
