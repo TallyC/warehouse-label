@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>倉儲標籤產生器 (支援進度匯出/匯入)</title>
+  <title>法鼓山香積室住宿空間倉儲櫃位說明產生器</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+    :root {
+        --card-padding: 6mm;
+    }
     body { font-family: 'Noto Sans TC', sans-serif; background-color: #f3f4f6; }
     
     .label-card {
@@ -18,7 +21,7 @@
       box-shadow: 0 4px 6px rgba(0,0,0,0.1);
       position: relative;
       overflow: hidden;
-      padding: 12mm;
+      padding: var(--card-padding);
       box-sizing: border-box;
       flex-shrink: 0;
     }
@@ -35,6 +38,10 @@
     #print-area { display: none; }
 
     @media print {
+      @page { 
+          size: A4 portrait; 
+          margin: 0; 
+      }
       body * { visibility: hidden; }
       #print-area, #print-area * { visibility: visible; }
       body { background: white; margin: 0; padding: 0; }
@@ -115,7 +122,7 @@
 
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">本標籤張貼櫃位 (Cabinet ID)</label>
-          <input type="text" id="cabinetName" value="日用品櫃 01" class="w-full p-2 border rounded border-gray-300 font-bold" oninput="updatePreview()">
+          <input type="text" id="cabinetName" value="立櫃 01-中" class="w-full p-2 border rounded border-gray-300 font-bold" oninput="updatePreview()">
         </div>
         
         <label class="flex items-center gap-2 text-sm font-bold text-gray-700 mt-2 cursor-pointer">
@@ -142,6 +149,10 @@
 
             <div class="grid grid-cols-2 gap-3">
                 <div>
+                    <label class="block text-gray-600 mb-1">標題字級 (px)</label>
+                    <input type="number" id="headerTitleSize" value="14" class="w-full p-1 border rounded" oninput="updatePreview()" title="左上角小標題字級">
+                </div>
+                <div>
                     <label class="block text-gray-600 mb-1">櫃位字級 (px)</label>
                     <input type="number" id="cabinetNameSize" value="32" class="w-full p-1 border rounded" oninput="updatePreview()">
                 </div>
@@ -157,8 +168,12 @@
                     <label class="block text-gray-600 mb-1">一般內文字級 (px)</label>
                     <input type="number" id="baseTextSize" value="18" class="w-full p-1 border rounded" oninput="updatePreview()">
                 </div>
+                <div>
+                    <label class="block text-gray-800 font-bold mb-1">卡片四周留白 (mm)</label>
+                    <input type="number" id="paddingSize" value="6" class="w-full p-1 border border-blue-400 rounded bg-white text-blue-700 font-bold" title="預設6mm，可依需求增減" oninput="updatePreview()">
+                </div>
                 <div class="col-span-2">
-                    <label class="block text-gray-800 font-bold mb-1">整體區塊間隙 (Gap)</label>
+                    <label class="block text-gray-800 font-bold mb-1">內部區塊間隙 (Gap)</label>
                     <input type="number" id="gapSize" value="20" class="w-full p-1 border border-gray-400 rounded bg-white" oninput="updatePreview()">
                 </div>
             </div>
@@ -220,7 +235,7 @@
                   <input type="checkbox" id="showNote" checked onchange="updatePreview()"> 顯示
                 </label>
                 <div class="flex gap-2">
-                    <input type="text" id="specialNote" value="請分類整齊放入膠籃" class="flex-1 p-2 border rounded border-red-300 text-sm" oninput="updatePreview()">
+                    <input type="text" id="specialNote" value="枕頭心套上枕頭套，一排6個收納。" class="flex-1 p-2 border rounded border-red-300 text-sm" oninput="updatePreview()">
                     <input type="number" id="noteSize" value="18" class="w-16 p-2 border rounded border-red-300 text-sm" title="字級(px)" oninput="updatePreview()">
                 </div>
             </div>
@@ -230,7 +245,7 @@
                   <input type="checkbox" id="showFold" onchange="updatePreview()"> 顯示
                 </label>
                 <div class="flex gap-2">
-                    <input type="text" id="foldNote" value="將被子對折後平放" class="flex-1 p-2 border rounded border-indigo-300 text-sm" oninput="updatePreview()">
+                    <input type="text" id="foldNote" value="摺疊成長條後，對折堆疊平放。" class="flex-1 p-2 border rounded border-indigo-300 text-sm" oninput="updatePreview()">
                     <input type="number" id="foldSize" value="18" class="w-16 p-2 border rounded border-indigo-300 text-sm" title="字級(px)" oninput="updatePreview()">
                 </div>
             </div>
@@ -286,15 +301,15 @@
 
 <script>
   let locData = [];
-  let multiItems = [{ name: "塑膠籃 (白)", cabinetQty: "34", totalQty: "34" }];
+  let multiItems = [{ name: "枕頭心", cabinetQty: "20", totalQty: "97" }, { name: "枕頭套", cabinetQty: "7", totalQty: "42" }];
   let importedData = [];
   let completedLabels = [];
-  let noOtherLocs = true;
+  let noOtherLocs = false;
 
   function init() {
     renderMultiItems();
     renderLocList();
-    toggleNoOtherLocs(true);
+    toggleNoOtherLocs(false);
     updatePreview();
   }
   
@@ -386,10 +401,15 @@
   }
 
   function updatePreview() {
+    // 取得並套用 Padding (四周留白)
+    const paddingSize = document.getElementById('paddingSize').value || 6;
+    document.documentElement.style.setProperty('--card-padding', paddingSize + 'mm');
+
     const cabinetName = escapeHtml(document.getElementById('cabinetName').value);
     const showQty = document.getElementById('showQty').checked;
     
     // 字級與間距
+    const headerTitleSize = document.getElementById('headerTitleSize').value || 14;
     const cabinetNameSize = document.getElementById('cabinetNameSize').value || 32;
     const itemNameSize = document.getElementById('itemNameSize').value || 38;
     const qtySize = document.getElementById('qtySize').value || 28;
@@ -416,11 +436,11 @@
             <div class="text-gray-800 font-black" style="font-size: ${itemNameSize}px; line-height: 1.2;">${escapeHtml(item.name)}</div>
             ${showQty ? `
             <div class="flex gap-3 mt-1">
-                <div class="bg-yellow-50 border-2 border-yellow-400 rounded-lg px-3 py-1 flex items-center gap-2 shadow-sm">
+                <div class="bg-yellow-50 border-2 border-yellow-400 rounded-lg px-3 py-1 flex items-center justify-between gap-2 shadow-sm flex-1">
                     <span class="text-yellow-800 font-bold" style="font-size: ${baseTextSize}px;">本櫃收納</span>
                     <span class="text-yellow-600 font-black" style="font-size: ${qtySize}px;">${escapeHtml(item.cabinetQty)}</span>
                 </div>
-                <div class="bg-gray-50 border-2 border-gray-300 rounded-lg px-3 py-1 flex items-center gap-2 shadow-sm">
+                <div class="bg-gray-50 border-2 border-gray-300 rounded-lg px-3 py-1 flex items-center justify-between gap-2 shadow-sm flex-1">
                     <span class="text-gray-600 font-bold" style="font-size: ${baseTextSize}px;">總庫存</span>
                     <span class="text-gray-800 font-black" style="font-size: ${qtySize}px;">${escapeHtml(item.totalQty)}</span>
                 </div>
@@ -430,7 +450,7 @@
     `).join('');
     
     let html_multiItems = `
-        <div class="flex-1 no-scrollbar overflow-y-auto pr-2 border-2 border-blue-100 bg-white rounded-xl p-4 shadow-inner min-h-0">
+        <div class="flex-1 no-scrollbar overflow-y-auto pr-2 bg-white min-h-0">
             ${multiItemsInnerHtml}
         </div>
     `;
@@ -467,19 +487,19 @@
     let noteInner = '';
     if(showFold) {
         noteInner += `
-        <div class="bg-indigo-50 border-2 border-indigo-400 text-indigo-700 rounded-lg p-3 shrink-0">
+        <div class="text-indigo-700 shrink-0">
             <div class="font-black flex items-center gap-2 mb-1"><span class="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">📏</span> 折疊說明</div>
             <div class="font-bold" style="font-size: ${foldSize}px; line-height: 1.3;">${foldNote}</div>
         </div>`;
     }
     if(showNote) {
         noteInner += `
-        <div class="bg-red-50 border-2 border-red-400 text-red-700 rounded-lg p-3 shrink-0">
+        <div class="text-red-700 shrink-0 mt-3 pt-3 border-t border-red-200">
             <div class="font-black flex items-center gap-2 mb-1"><span class="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">!</span> 收納提醒</div>
             <div class="font-bold" style="font-size: ${noteSize}px; line-height: 1.3;">${specialNote}</div>
         </div>`;
     }
-    let html_note = noteInner ? `<div class="flex flex-col shrink-0 gap-2">${noteInner}</div>` : '';
+    let html_note = (showFold || showNote) ? `<div class="bg-red-50 border-2 border-red-400 rounded-lg p-3 flex flex-col shrink-0">${noteInner}</div>` : '';
 
 
     // --- 根據拖曳順序組合欄位 ---
@@ -499,9 +519,15 @@
     const html = `
       <div class="h-full flex flex-col relative bg-white">
         
-        <div class="border-b-4 border-teal-600 pb-3 shrink-0" style="margin-bottom: ${gapSize}px;">
-          <div class="inline-block bg-teal-500 text-white px-6 py-2 rounded-t-lg rounded-br-lg font-bold shadow-sm" style="font-size: ${cabinetNameSize}px;">
-            📍 ${cabinetName}
+        <div class="flex justify-between items-start border-b-2 border-gray-300 pb-2 shrink-0" style="margin-bottom: ${gapSize}px;">
+          <div class="text-gray-500 font-bold" style="font-size: ${headerTitleSize}px;">
+            法鼓山香積室住宿空間倉儲櫃位說明
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mb-4 shrink-0">
+          <span class="text-teal-600 text-3xl font-black">●</span>
+          <div class="text-teal-700 font-black" style="font-size: ${cabinetNameSize}px; line-height: 1;">
+            ${cabinetName}
           </div>
         </div>
 
@@ -565,11 +591,13 @@
     const rawState = {
       cabinetName: cabinet,
       showQty: document.getElementById('showQty').checked,
+      headerTitleSize: document.getElementById('headerTitleSize').value,
       cabinetNameSize: document.getElementById('cabinetNameSize').value,
       itemNameSize: document.getElementById('itemNameSize').value,
       qtySize: document.getElementById('qtySize').value,
       baseTextSize: document.getElementById('baseTextSize').value,
       gapSize: document.getElementById('gapSize').value,
+      paddingSize: document.getElementById('paddingSize').value,
       leftColLayout: Array.from(document.getElementById('leftColConfig').children).filter(e=>e.id && e.id.startsWith('mod_')).map(e=>e.id),
       rightColLayout: Array.from(document.getElementById('rightColConfig').children).filter(e=>e.id && e.id.startsWith('mod_')).map(e=>e.id),
       multiItems: JSON.parse(JSON.stringify(multiItems)),
@@ -597,11 +625,13 @@
     document.getElementById('cabinetName').value = state.cabinetName;
     if(state.showQty !== undefined) document.getElementById('showQty').checked = state.showQty;
     
+    if(state.headerTitleSize) document.getElementById('headerTitleSize').value = state.headerTitleSize;
     document.getElementById('cabinetNameSize').value = state.cabinetNameSize;
     document.getElementById('itemNameSize').value = state.itemNameSize;
     document.getElementById('qtySize').value = state.qtySize;
     document.getElementById('baseTextSize').value = state.baseTextSize;
     document.getElementById('gapSize').value = state.gapSize;
+    if(state.paddingSize) document.getElementById('paddingSize').value = state.paddingSize;
 
     // Restore Layout
     const leftContainer = document.getElementById('leftColConfig');
@@ -646,7 +676,7 @@
     renderQueueList();
     updatePreview();
     
-    document.querySelector('.w-1\\/3.overflow-y-auto').scrollTo(0,0);
+    document.querySelector('.w-1\/3.overflow-y-auto').scrollTo(0,0);
   }
 
   function renderQueueList() {
@@ -774,7 +804,8 @@
           if(!res.ok) throw new Error("網路連線失敗或網址不正確");
           const text = await res.text();
           
-          const lines = text.split('\n');
+          const lines = text.split('
+');
           const headers = lines[0].split(',');
           const json = [];
           for(let i=1; i<lines.length; i++) {
@@ -788,7 +819,8 @@
           }
           processImportedJson(json);
       } catch (err) {
-          alert("雲端讀取失敗。請確認連結是否為發布的 CSV 格式。\n錯誤細節：" + err.message);
+          alert("雲端讀取失敗。請確認連結是否為發布的 CSV 格式。
+錯誤細節：" + err.message);
       }
   }
 
@@ -803,7 +835,8 @@
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
         processImportedJson(json);
-      } catch (err) { alert("讀取 Excel 失敗。\n錯誤訊息: " + err.message); }
+      } catch (err) { alert("讀取 Excel 失敗。
+錯誤訊息: " + err.message); }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -815,7 +848,9 @@
       json.forEach((row, index) => {
         let cabinet = row['櫃位'] || row['櫃位名稱'] || row['Cabinet'] || '未知櫃位';
         let item = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'] || '未知物品';
-        let displayItem = String(item).split(/\r?\n/)[0].trim(); 
+        let displayItem = String(item).split(/
+?
+/)[0].trim(); 
         sel.innerHTML += `<option value="${index}">[${cabinet}] ${displayItem}</option>`;
       });
       document.getElementById('todoContainer').classList.remove('hidden');
@@ -836,9 +871,15 @@
       let cabinetQtyRaw = String(data['本櫃數量'] || data['數量'] || '');
       let totalQtyRaw = String(data['全部櫃位總量'] || data['總數量'] || data['數量'] || '');
       
-      let items = itemNameRaw.split(/\r?\n/).filter(i => i.trim() !== '');
-      let cQtys = cabinetQtyRaw.split(/\r?\n/).filter(i => i.trim() !== '');
-      let tQtys = totalQtyRaw.split(/\r?\n/).filter(i => i.trim() !== '');
+      let items = itemNameRaw.split(/
+?
+/).filter(i => i.trim() !== '');
+      let cQtys = cabinetQtyRaw.split(/
+?
+/).filter(i => i.trim() !== '');
+      let tQtys = totalQtyRaw.split(/
+?
+/).filter(i => i.trim() !== '');
 
       let newItems = [];
       if(items.length > 0) {
@@ -865,7 +906,9 @@
           let otherStr = data['其他櫃位與數量'] || data['其他儲放櫃位與數量'] || '';
           locData = [];
           if(otherStr && !otherStr.includes('無其他')) {
-            const parts = otherStr.split(/\r?\n/);
+            const parts = otherStr.split(/
+?
+/);
             parts.forEach(p => {
               let sp = p.split(/：|:/);
               if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
