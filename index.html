@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>倉儲標籤產生器 (完整修復版)</title>
+  <title>倉儲標籤產生器 (支援區塊拖曳與顯示切換)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -29,9 +29,9 @@
         margin-bottom: -15mm;
     }
 
-    .drag-handle { cursor: grab; }
-    .drag-handle:active { cursor: grabbing; }
-    .dragging { opacity: 0.5; background: #e5e7eb; }
+    /* 隱藏原生捲軸但保留滾動功能 (針對標籤內部) */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     #print-area { display: none; }
 
@@ -62,6 +62,11 @@
     
     .multi-item-row { border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; margin-bottom: 8px; }
     .multi-item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+    /* 拖曳區塊樣式 */
+    .layout-mod { transition: transform 0.1s, box-shadow 0.1s; }
+    .layout-mod:active { transform: scale(0.98); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); cursor: grabbing; }
+    .dragging-mod { opacity: 0.4; border: 2px dashed #9ca3af; }
   </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -75,10 +80,21 @@
 
     <div class="flex-1 overflow-y-auto p-5 space-y-4">
       
-      <!-- Excel 匯入 -->
-      <div class="p-4 border border-blue-200 rounded-lg bg-blue-50">
-        <label class="block font-bold text-blue-800 mb-2">匯入試算表 (.xlsx/.csv)</label>
-        <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200" onchange="handleExcelUpload(event)">
+      <!-- 匯入資料區 -->
+      <div class="p-4 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
+        <label class="block font-bold text-blue-800">📂 匯入庫存資料</label>
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">方法一：貼上 Google 試算表 CSV 連結</label>
+            <div class="flex gap-2">
+                <input type="text" id="cloudUrl" placeholder="https://docs.google.com/spreadsheets/.../pub?output=csv" class="flex-1 p-2 border rounded text-sm">
+                <button onclick="fetchCloudData()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-bold shrink-0">雲端載入</button>
+            </div>
+        </div>
+        <div class="text-center text-gray-400 text-xs font-bold">--- 或 ---</div>
+        <div>
+            <label class="block text-xs text-gray-600 mb-1">方法二：上傳本地端 Excel 檔案</label>
+            <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200" onchange="handleExcelUpload(event)">
+        </div>
         <select id="todoList" class="mt-3 w-full p-2 border border-blue-300 rounded hidden" onchange="loadTodoItem(this.value)">
           <option value="">-- 請選擇待處理項目 --</option>
         </select>
@@ -88,14 +104,38 @@
       <div class="space-y-3 border p-4 rounded-lg bg-white shadow-sm">
         <div class="flex items-center justify-between">
             <h2 class="font-bold text-gray-800">📌 標籤基本設定</h2>
-            <div class="text-sm cursor-pointer text-teal-600 hover:underline" onclick="toggleSection('layoutSection')">⚙️ 版面微調</div>
+            <div class="text-sm cursor-pointer text-teal-600 hover:underline" onclick="toggleSection('layoutSection')">⚙️ 版面與排版調整</div>
         </div>
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">本標籤張貼櫃位 (Cabinet ID)</label>
           <input type="text" id="cabinetName" value="日用品櫃 01" class="w-full p-2 border rounded border-gray-300" oninput="updatePreview()">
         </div>
         
+        <label class="flex items-center gap-2 text-sm font-bold text-gray-700 mt-2 cursor-pointer">
+          <input type="checkbox" id="showQty" checked onchange="updatePreview()"> 顯示各物品數量 (本櫃收納/總庫存)
+        </label>
+
+        <!-- 區塊排版與字級 -->
         <div id="layoutSection" class="hidden transition-all duration-300 mt-2 p-3 bg-gray-50 border rounded text-sm">
+            
+            <div class="mb-4 border-b border-gray-200 pb-4">
+                <label class="block text-gray-800 font-bold mb-2">區塊排列 (按住拖曳調整左右欄位置)</label>
+                <div class="flex gap-2">
+                    <div class="flex-1 bg-white border border-gray-300 rounded p-2 min-h-[140px]" ondragover="allowDrop(event)" ondrop="dropBlock(event)" id="leftColConfig">
+                        <div class="text-center text-xs font-bold text-gray-400 mb-2 border-b pb-1 pointer-events-none">左側欄位</div>
+                        <div id="mod_multiItems" class="layout-mod bg-blue-50 border border-blue-200 text-blue-800 p-2 mb-2 rounded cursor-grab text-center text-xs font-bold shadow-sm" draggable="true" ondragstart="dragBlockStart(event)" ondragend="dragBlockEnd(event)">📦 物品與數量清單</div>
+                        <div id="mod_note" class="layout-mod bg-red-50 border border-red-200 text-red-800 p-2 mb-2 rounded cursor-grab text-center text-xs font-bold shadow-sm" draggable="true" ondragstart="dragBlockStart(event)" ondragend="dragBlockEnd(event)">⚠️ 提醒與說明區</div>
+                    </div>
+                    <div class="flex-1 bg-white border border-gray-300 rounded p-2 min-h-[140px]" ondragover="allowDrop(event)" ondrop="dropBlock(event)" id="rightColConfig">
+                        <div class="text-center text-xs font-bold text-gray-400 mb-2 border-b pb-1 pointer-events-none">右側欄位</div>
+                        <div id="mod_image" class="layout-mod bg-gray-50 border border-gray-300 text-gray-700 p-2 mb-2 rounded cursor-grab text-center text-xs font-bold shadow-sm" draggable="true" ondragstart="dragBlockStart(event)" ondragend="dragBlockEnd(event)">🖼️ 實景圖片</div>
+                        <div id="mod_order" class="layout-mod bg-teal-50 border border-teal-200 text-teal-800 p-2 mb-2 rounded cursor-grab text-center text-xs font-bold shadow-sm" draggable="true" ondragstart="dragBlockStart(event)" ondragend="dragBlockEnd(event)">📥 歸位收納順序</div>
+                        <div id="mod_loc" class="layout-mod bg-purple-50 border border-purple-200 text-purple-800 p-2 mb-2 rounded cursor-grab text-center text-xs font-bold shadow-sm" draggable="true" ondragstart="dragBlockStart(event)" ondragend="dragBlockEnd(event)">🔍 其他儲放區</div>
+                    </div>
+                </div>
+                <p class="text-[10px] text-gray-500 text-center mt-1">提示：若希望照片在左方，只需將「實景圖片」拖移至左側欄位即可。</p>
+            </div>
+
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-gray-600 mb-1">櫃位字級 (px)</label>
@@ -125,15 +165,12 @@
       <div class="border p-4 rounded-lg shadow-sm bg-blue-50 border-blue-200">
         <div class="flex justify-between items-center mb-3">
           <label class="font-bold text-blue-800">📦 櫃內存放物品清單</label>
-          <span class="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded">支援多品項</span>
         </div>
-        <div id="multiItemsContainer" class="space-y-3">
-            <!-- JS 動態產生多物品輸入框 -->
-        </div>
+        <div id="multiItemsContainer" class="space-y-3"></div>
         <button onclick="addMultiItemRow()" class="w-full mt-3 py-2 border-2 border-dashed border-blue-400 text-blue-600 font-bold rounded hover:bg-blue-100">+ 新增同櫃物品</button>
       </div>
 
-      <!-- 圖片上傳 (可選) -->
+      <!-- 圖片上傳 -->
       <div class="border p-4 rounded-lg bg-gray-50">
         <label class="block text-sm font-bold text-gray-700 mb-1 flex justify-between">
             <span>🖼️ 櫃位實景圖 (選填)</span>
@@ -145,7 +182,7 @@
         </div>
       </div>
 
-      <!-- 其他儲放區 (無其他區域處理) -->
+      <!-- 其他儲放區 -->
       <div class="border p-4 rounded-lg bg-gray-50">
         <div class="flex justify-between items-center mb-2">
           <label class="font-bold text-gray-700 cursor-pointer flex items-center gap-2" onclick="toggleSection('locSection')">
@@ -166,7 +203,7 @@
         </div>
       </div>
 
-      <!-- 收納順序 (可折疊) -->
+      <!-- 收納順序 -->
       <div class="border p-4 rounded-lg">
         <div class="flex justify-between items-center mb-2 cursor-pointer" onclick="toggleSection('orderSection')">
            <label class="font-bold text-gray-700 cursor-pointer">📥 歸位收納順序</label>
@@ -178,22 +215,33 @@
         </div>
       </div>
 
-      <!-- 特別提醒 (可折疊) -->
+      <!-- 特別提醒與折疊說明 -->
       <div class="border border-red-200 p-4 rounded-lg bg-red-50">
-        <div class="flex justify-between items-center mb-2">
-          <label class="font-bold text-red-700 cursor-pointer flex items-center gap-2" onclick="toggleSection('noteSection')">
-              ⚠️ 收納特別提醒 <span id="noteSectionIcon" class="text-red-500 text-sm">▼</span>
-          </label>
-          <label class="flex items-center gap-1 text-sm cursor-pointer text-red-700">
-            <input type="checkbox" id="showNote" checked onchange="updatePreview()"> 顯示區塊
-          </label>
+        <div class="flex justify-between items-center mb-2 cursor-pointer" onclick="toggleSection('noteSection')">
+           <label class="font-bold text-red-700">⚠️ 提醒與說明區</label>
+           <span id="noteSectionIcon" class="text-red-500 text-sm">▼</span>
         </div>
-        <div id="noteSection" class="transition-all duration-300">
-            <div id="noteContainer">
-              <div class="flex gap-2 mb-2">
-                 <input type="text" id="specialNote" value="請分類整齊放入膠籃" class="flex-1 p-2 border rounded border-red-300" oninput="updatePreview()">
-              </div>
+        <div id="noteSection" class="transition-all duration-300 space-y-4">
+            
+            <div class="bg-white p-3 rounded border border-red-100">
+                <label class="flex justify-between items-center text-sm font-bold text-red-700 mb-2">
+                  <span>收納特別提醒</span>
+                  <input type="checkbox" id="showNote" checked onchange="updatePreview()"> 顯示
+                </label>
+                <input type="text" id="specialNote" value="請分類整齊放入膠籃" class="w-full p-2 border rounded border-red-300 text-sm" oninput="updatePreview()">
             </div>
+
+            <div class="bg-white p-3 rounded border border-indigo-100">
+                <label class="flex justify-between items-center text-sm font-bold text-indigo-700 mb-2">
+                  <span>折疊方式說明</span>
+                  <input type="checkbox" id="showFold" onchange="updatePreview()"> 顯示
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="foldNote" value="將被子對折後平放" class="flex-1 p-2 border rounded border-indigo-300 text-sm" oninput="updatePreview()">
+                    <input type="number" id="foldSize" value="18" class="w-16 p-2 border rounded border-indigo-300 text-sm" title="字級(px)" oninput="updatePreview()">
+                </div>
+            </div>
+
         </div>
       </div>
 
@@ -204,10 +252,8 @@
     </div>
   </div>
 
-  <!-- 右側區域：預覽與清單 -->
+  <!-- 右側區域 -->
   <div class="w-2/3 h-full bg-gray-200 flex flex-col print:w-full print:h-auto print:hidden">
-    
-    <!-- 上半部：即時預覽 -->
     <div class="flex-grow flex flex-col" style="flex-basis: 70%;">
         <div class="p-3 bg-gray-800 text-white font-bold shrink-0">👁️ 即時預覽 (Live Preview)</div>
         <div class="flex-1 overflow-y-auto p-4 flex justify-center bg-gray-300">
@@ -216,10 +262,7 @@
             </div>
         </div>
     </div>
-
     <div class="h-1 bg-gray-400 shrink-0 shadow-inner"></div>
-
-    <!-- 下半部：完成清單區 -->
     <div class="flex flex-col bg-white border-t" style="flex-basis: 30%; min-height: 200px;">
         <div class="p-2 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center text-sm">
             <span>✅ 完成標籤清單</span>
@@ -242,13 +285,10 @@
   <div id="print-area"></div>
 
 <script>
-  let orderData = [
-    { text: "日用品櫃 01 (本櫃)", isTarget: true }
-  ];
+  let orderData = [{ text: "日用品櫃 01 (本櫃)", isTarget: true }];
   let locData = [];
-  let multiItems = [
-    { name: "塑膠籃 (白)", cabinetQty: "34", totalQty: "34" }
-  ];
+  let multiItems = [{ name: "塑膠籃 (白)", cabinetQty: "34", totalQty: "34" }];
+  let importedData = [];
   let completedLabels = [];
   let noOtherLocs = true;
 
@@ -277,13 +317,38 @@
       }
   }
 
-  // --- 多物品處理邏輯 ---
+  // --- 拖曳版面配置邏輯 ---
+  function dragBlockStart(e) {
+      e.dataTransfer.setData("text/plain", e.target.id);
+      e.target.classList.add('dragging-mod');
+  }
+  function dragBlockEnd(e) {
+      e.target.classList.remove('dragging-mod');
+  }
+  function allowDrop(e) { e.preventDefault(); }
+  function dropBlock(e) {
+      e.preventDefault();
+      const id = e.dataTransfer.getData("text/plain");
+      const el = document.getElementById(id);
+      const container = e.currentTarget; 
+      const target = e.target.closest('.layout-mod');
+
+      if (target && target.parentNode === container && target !== el) {
+          const rect = target.getBoundingClientRect();
+          const next = (e.clientY - rect.top) / (rect.bottom - rect.top) > 0.5;
+          container.insertBefore(el, next ? target.nextSibling : target);
+      } else if (container) {
+          container.appendChild(el);
+      }
+      updatePreview();
+  }
+
   function renderMultiItems() {
       const container = document.getElementById('multiItemsContainer');
       container.innerHTML = multiItems.map((item, idx) => `
           <div class="bg-white p-2 border border-blue-200 rounded relative shadow-sm">
              <button onclick="removeMultiItem(${idx})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">✖</button>
-             <input type="text" class="w-full p-1 border-b border-gray-300 font-bold text-gray-800 focus:outline-none focus:border-blue-500 mb-2" value="${item.name}" placeholder="物品名稱 (如: 塑膠籃)" oninput="updateMultiItem(${idx}, 'name', this.value)">
+             <input type="text" class="w-full p-1 border-b border-gray-300 font-bold text-gray-800 focus:outline-none focus:border-blue-500 mb-2" value="${item.name}" placeholder="物品名稱" oninput="updateMultiItem(${idx}, 'name', this.value)">
              <div class="flex gap-2 text-sm">
                  <div class="flex-1 flex items-center bg-yellow-50 px-2 rounded border border-yellow-200">
                      <span class="text-yellow-700 whitespace-nowrap mr-1">本櫃</span>
@@ -302,7 +367,6 @@
   function removeMultiItem(idx) { multiItems.splice(idx, 1); renderMultiItems(); }
   function updateMultiItem(idx, field, val) { multiItems[idx][field] = val; updatePreview(); }
 
-  // --- 無其他備用區切換邏輯 ---
   function toggleNoOtherLocs(initCall = false) {
       if(!initCall) { noOtherLocs = document.getElementById('noOtherLocsFlag').checked; }
       else { document.getElementById('noOtherLocsFlag').checked = true; noOtherLocs = true; }
@@ -322,25 +386,35 @@
 
   function updatePreview() {
     const cabinetName = document.getElementById('cabinetName').value;
+    const showQty = document.getElementById('showQty').checked;
     
+    // 字級與間距
     const cabinetNameSize = document.getElementById('cabinetNameSize').value || 26;
     const itemNameSize = document.getElementById('itemNameSize').value || 28;
     const qtySize = document.getElementById('qtySize').value || 24;
     const baseTextSize = document.getElementById('baseTextSize').value || 16;
     const gapSize = document.getElementById('gapSize').value || 16;
 
+    // 圖片
     const showImage = document.getElementById('showImage').checked;
     const imgSrc = document.getElementById('imageUpload').dataset.src || document.getElementById('imageUrl').value || 'https://via.placeholder.com/400x200?text=無實景圖';
     document.getElementById('imageInputSection').style.display = showImage ? 'block' : 'none';
 
+    // 提醒
     const showNote = document.getElementById('showNote').checked;
     const specialNote = document.getElementById('specialNote').value;
-    document.getElementById('noteContainer').style.display = showNote ? 'block' : 'none';
+    const showFold = document.getElementById('showFold').checked;
+    const foldNote = document.getElementById('foldNote').value;
+    const foldSize = document.getElementById('foldSize').value || 18;
 
-    let multiItemsHtml = multiItems.map(item => `
+    // --- 產生各獨立區塊的 HTML ---
+
+    // 1. 物品與數量清單區塊 (mod_multiItems)
+    let multiItemsInnerHtml = multiItems.map(item => `
         <div class="multi-item-row flex flex-col" style="gap: ${gapSize/4}px;">
             <div class="text-gray-800 font-black" style="font-size: ${itemNameSize}px; line-height: 1.2;">${item.name}</div>
-            <div class="flex gap-3">
+            ${showQty ? `
+            <div class="flex gap-3 mt-1">
                 <div class="bg-yellow-50 border border-yellow-400 rounded px-2 py-1 flex items-center gap-2 shadow-sm">
                     <span class="text-yellow-800 font-bold" style="font-size: ${baseTextSize}px;">本櫃收納</span>
                     <span class="text-yellow-600 font-black" style="font-size: ${qtySize}px;">${item.cabinetQty}</span>
@@ -350,27 +424,93 @@
                     <span class="text-gray-800 font-black" style="font-size: ${qtySize}px;">${item.totalQty}</span>
                 </div>
             </div>
+            ` : ''}
         </div>
     `).join('');
+    
+    let html_multiItems = `
+        <div class="flex-1 no-scrollbar overflow-y-auto pr-2 border-2 border-blue-100 bg-white rounded-xl p-4 shadow-inner min-h-0">
+            ${multiItemsInnerHtml}
+        </div>
+    `;
 
-    let orderHtml = orderData.map((item, idx) => `
+    // 2. 圖片區塊 (mod_image)
+    let html_image = showImage ? `
+        <div class="shrink-0 h-48 border-2 border-gray-200 rounded-xl p-1 flex items-center justify-center overflow-hidden bg-gray-50">
+            <img src="${imgSrc}" class="max-h-full max-w-full object-contain mix-blend-multiply">
+        </div>
+    ` : '';
+
+    // 3. 收納順序區塊 (mod_order)
+    let orderHtmlInner = orderData.map((item, idx) => `
       <div class="flex items-center gap-3 p-2 rounded ${item.isTarget ? 'bg-teal-50 border border-teal-200' : 'bg-gray-50'}" style="font-size: ${baseTextSize}px;">
         <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${item.isTarget ? 'bg-teal-600 text-white' : 'bg-gray-300 text-gray-700'}">${idx + 1}</div>
         <div class="font-medium text-gray-700 ${item.isTarget ? 'text-teal-800' : ''}">${item.text} ${item.isTarget ? '<span class="text-xs font-bold bg-teal-200 text-teal-800 px-1 rounded ml-1">[本櫃]</span>' : ''}</div>
       </div>
     `).join('');
+    let html_order = `
+        <div class="border-2 border-gray-200 rounded-xl p-4 flex-1 flex flex-col min-h-0 shrink-0">
+          <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0" style="font-size: ${baseTextSize}px;">
+            📥 歸位收納優先順序
+          </div>
+          <div class="space-y-2 no-scrollbar overflow-y-auto pr-1">${orderHtmlInner}</div>
+        </div>
+    `;
 
-    let locHtml = "";
+    // 4. 其他儲放區塊 (mod_loc)
+    let locHtmlInner = "";
     if (noOtherLocs) {
-        locHtml = `<div class="p-3 bg-gray-100 text-gray-500 rounded border border-gray-200 text-center font-bold" style="font-size: ${baseTextSize}px;">🚫 本櫃限定，無其他儲放區</div>`;
+        locHtmlInner = `<div class="p-3 bg-gray-100 text-gray-500 rounded border border-gray-200 text-center font-bold" style="font-size: ${baseTextSize}px;">🚫 本櫃限定，無其他儲放區</div>`;
     } else {
-        locHtml = locData.map(loc => `
+        locHtmlInner = locData.map(loc => `
           <div class="flex justify-between py-2 border-b border-gray-100 last:border-0 text-gray-600" style="font-size: ${baseTextSize}px;">
             <span>${loc.name}</span>
             <span class="font-bold">${loc.qty}</span>
           </div>
         `).join('');
     }
+    let html_loc = `
+        <div class="border-2 border-gray-200 rounded-xl p-4 shrink-0 flex flex-col min-h-0 ${noOtherLocs ? 'bg-gray-50 border-dashed' : ''}">
+          <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0" style="font-size: ${baseTextSize}px;">
+            🔍 其他儲放區
+          </div>
+          <div class="no-scrollbar overflow-y-auto pr-1">${locHtmlInner}</div>
+        </div>
+    `;
+
+    // 5. 提醒與說明區塊 (mod_note)
+    let noteInner = '';
+    if(showFold) {
+        noteInner += `
+        <div class="bg-indigo-50 border-2 border-indigo-400 text-indigo-700 rounded-lg p-3 shrink-0">
+            <div class="font-black flex items-center gap-2 mb-1"><span class="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">📏</span> 折疊說明</div>
+            <div class="font-bold" style="font-size: ${foldSize}px; line-height: 1.3;">${foldNote}</div>
+        </div>`;
+    }
+    if(showNote) {
+        noteInner += `
+        <div class="bg-red-50 border-2 border-red-400 text-red-700 rounded-lg p-3 shrink-0">
+            <div class="font-black flex items-center gap-2 mb-1"><span class="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">!</span> 收納提醒</div>
+            <div class="font-bold" style="font-size: ${baseTextSize}px; line-height: 1.3;">${specialNote}</div>
+        </div>`;
+    }
+    let html_note = noteInner ? `<div class="flex flex-col shrink-0 gap-2">${noteInner}</div>` : '';
+
+
+    // --- 根據拖曳順序組合欄位 ---
+    const modHtmlMap = {
+        'mod_multiItems': html_multiItems,
+        'mod_image': showImage ? html_image : '',
+        'mod_order': html_order,
+        'mod_loc': html_loc,
+        'mod_note': html_note
+    };
+
+    const leftIds = Array.from(document.getElementById('leftColConfig').children).map(e=>e.id).filter(id => id.startsWith('mod_'));
+    const rightIds = Array.from(document.getElementById('rightColConfig').children).map(e=>e.id).filter(id => id.startsWith('mod_'));
+
+    const leftColHtml = leftIds.map(id => modHtmlMap[id]).join('');
+    const rightColHtml = rightIds.map(id => modHtmlMap[id]).join('');
 
     const html = `
       <div class="h-full flex flex-col relative bg-white">
@@ -382,40 +522,11 @@
         </div>
 
         <div class="flex flex-1 min-h-0" style="gap: ${gapSize}px;">
-          
           <div class="w-1/2 flex flex-col h-full overflow-hidden" style="gap: ${gapSize}px;">
-             <div class="flex-1 overflow-y-auto pr-2 border-2 border-blue-100 bg-white rounded-xl p-4 shadow-inner">
-                ${multiItemsHtml}
-             </div>
-
-             ${showNote ? `
-             <div class="bg-red-50 border-2 border-red-400 text-red-700 rounded-lg p-3 shrink-0">
-               <div class="font-black flex items-center gap-2 mb-1"><span class="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">!</span> 特別提醒</div>
-               <div class="font-bold" style="font-size: ${baseTextSize}px; line-height: 1.3;">${specialNote}</div>
-             </div>
-             ` : ''}
+             ${leftColHtml}
           </div>
-
           <div class="w-1/2 flex flex-col h-full overflow-hidden" style="gap: ${gapSize}px;">
-            ${showImage ? `
-            <div class="shrink-0 h-40 border-2 border-gray-200 rounded-xl p-1 flex items-center justify-center overflow-hidden bg-gray-50">
-              <img src="${imgSrc}" class="max-h-full max-w-full object-contain mix-blend-multiply">
-            </div>
-            ` : ''}
-
-            <div class="border-2 border-gray-200 rounded-xl p-4 flex-1 flex flex-col min-h-0">
-              <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0" style="font-size: ${baseTextSize}px;">
-                📥 歸位收納優先順序
-              </div>
-              <div class="space-y-2 overflow-y-auto pr-1">${orderHtml}</div>
-            </div>
-            
-            <div class="border-2 border-gray-200 rounded-xl p-4 shrink-0 flex flex-col ${noOtherLocs ? 'bg-gray-50 border-dashed' : ''}">
-              <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0" style="font-size: ${baseTextSize}px;">
-                🔍 其他儲放區
-              </div>
-              <div class="overflow-y-auto pr-1">${locHtml}</div>
-            </div>
+             ${rightColHtml}
           </div>
         </div>
       </div>
@@ -423,8 +534,7 @@
     document.getElementById('livePreview').innerHTML = html;
   }
 
-  // --- 拖曳排序邏輯 ---
-  let draggedIndex = null;
+  // --- 排序相關 ---
   function renderOrderList() {
     const list = document.getElementById('orderList');
     list.innerHTML = orderData.map((item, idx) => `
@@ -446,6 +556,7 @@
   function updateOrderText(idx, val) { orderData[idx].text = val; updatePreview(); }
   function setTargetLoc(idx) { orderData.forEach((item, i) => item.isTarget = (i === idx)); updatePreview(); }
 
+  // --- 其他儲位 ---
   function renderLocList() {
     const list = document.getElementById('locList');
     list.innerHTML = locData.map((loc, idx) => `
@@ -491,11 +602,14 @@
     
     const rawState = {
       cabinetName: cabinet,
+      showQty: document.getElementById('showQty').checked,
       cabinetNameSize: document.getElementById('cabinetNameSize').value,
       itemNameSize: document.getElementById('itemNameSize').value,
       qtySize: document.getElementById('qtySize').value,
       baseTextSize: document.getElementById('baseTextSize').value,
       gapSize: document.getElementById('gapSize').value,
+      leftColLayout: Array.from(document.getElementById('leftColConfig').children).filter(e=>e.id.startsWith('mod_')).map(e=>e.id),
+      rightColLayout: Array.from(document.getElementById('rightColConfig').children).filter(e=>e.id.startsWith('mod_')).map(e=>e.id),
       multiItems: JSON.parse(JSON.stringify(multiItems)),
       showImage: document.getElementById('showImage').checked,
       imageSrc: document.getElementById('imageUpload').dataset.src || '',
@@ -504,7 +618,10 @@
       locData: JSON.parse(JSON.stringify(locData)),
       orderData: JSON.parse(JSON.stringify(orderData)),
       showNote: document.getElementById('showNote').checked,
-      specialNote: document.getElementById('specialNote').value
+      specialNote: document.getElementById('specialNote').value,
+      showFold: document.getElementById('showFold').checked,
+      foldNote: document.getElementById('foldNote').value,
+      foldSize: document.getElementById('foldSize').value
     };
     
     completedLabels.push({ id: Date.now(), name, cabinet, html, rawState });
@@ -516,11 +633,29 @@
     const state = item.rawState;
 
     document.getElementById('cabinetName').value = state.cabinetName;
+    if(state.showQty !== undefined) document.getElementById('showQty').checked = state.showQty;
+    
     document.getElementById('cabinetNameSize').value = state.cabinetNameSize;
     document.getElementById('itemNameSize').value = state.itemNameSize;
     document.getElementById('qtySize').value = state.qtySize;
     document.getElementById('baseTextSize').value = state.baseTextSize;
     document.getElementById('gapSize').value = state.gapSize;
+
+    // Restore Layout
+    const leftContainer = document.getElementById('leftColConfig');
+    const rightContainer = document.getElementById('rightColConfig');
+    if(state.leftColLayout) {
+        state.leftColLayout.forEach(id => {
+            const el = document.getElementById(id);
+            if(el) leftContainer.appendChild(el);
+        });
+    }
+    if(state.rightColLayout) {
+        state.rightColLayout.forEach(id => {
+            const el = document.getElementById(id);
+            if(el) rightContainer.appendChild(el);
+        });
+    }
 
     multiItems = JSON.parse(JSON.stringify(state.multiItems));
     renderMultiItems();
@@ -543,12 +678,15 @@
 
     document.getElementById('showNote').checked = state.showNote;
     document.getElementById('specialNote').value = state.specialNote;
+    if(state.showFold !== undefined) document.getElementById('showFold').checked = state.showFold;
+    if(state.foldNote) document.getElementById('foldNote').value = state.foldNote;
+    if(state.foldSize) document.getElementById('foldSize').value = state.foldSize;
 
     completedLabels.splice(idx, 1);
     renderQueueList();
     updatePreview();
     
-    document.querySelector('.w-1\\/3.overflow-y-auto').scrollTo(0,0);
+    document.querySelector('.w-1\/3.overflow-y-auto').scrollTo(0,0);
   }
 
   function renderQueueList() {
@@ -627,7 +765,22 @@
     window.print();
   }
 
-  // --- Excel 匯入修復 ---
+  async function fetchCloudData() {
+      const url = document.getElementById('cloudUrl').value.trim();
+      if(!url) return alert("請輸入 Google 試算表的 CSV 連結！");
+      try {
+          const res = await fetch(url);
+          if(!res.ok) throw new Error("網路連線失敗或網址不正確");
+          const arrayBuffer = await res.arrayBuffer();
+          const workbook = XLSX.read(arrayBuffer, {type: 'array'});
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+          processImportedJson(json);
+      } catch (err) {
+          alert("雲端讀取失敗。請確認：\n1. 網址是否正確\n2. 試算表是否已設為「發布到網路 (CSV)」\n\n錯誤細節：" + err.message);
+      }
+  }
+
   function handleExcelUpload(e) {
     const file = e.target.files[0];
     if(!file) return;
@@ -638,39 +791,57 @@
         const workbook = XLSX.read(data, {type: 'array'});
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
-        
-        importedData = json;
-        const sel = document.getElementById('todoList');
-        sel.innerHTML = '<option value="">-- 請選擇待處理項目 --</option>';
-        json.forEach((row, index) => {
-          let cabinet = row['櫃位'] || row['櫃位名稱'] || '未知櫃位';
-          let item = row['物品'] || row['物品名稱'] || '未知物品';
-          sel.innerHTML += `<option value="${index}">[${cabinet}] ${item}</option>`;
-        });
-        sel.classList.remove('hidden');
-        alert(`成功匯入 ${json.length} 筆資料！`);
+        processImportedJson(json);
       } catch (err) { alert("讀取 Excel 失敗。\n錯誤訊息: " + err.message); }
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  function processImportedJson(json) {
+      importedData = json;
+      const sel = document.getElementById('todoList');
+      sel.innerHTML = '<option value="">-- 請選擇待處理項目 --</option>';
+      json.forEach((row, index) => {
+        let cabinet = row['櫃位'] || row['櫃位名稱'] || row['Cabinet'] || '未知櫃位';
+        let item = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'] || '未知物品';
+        let displayItem = item.split(/\r?\n/)[0]; 
+        sel.innerHTML += `<option value="${index}">[${cabinet}] ${displayItem}</option>`;
+      });
+      sel.classList.remove('hidden');
+      alert(`成功匯入 ${json.length} 筆資料！請由下拉選單選取進行編輯。`);
   }
 
   function loadTodoItem(idx) {
     if(idx === "") return;
     const data = importedData[idx];
     
-    document.getElementById('cabinetName').value = data['櫃位'] || data['櫃位名稱'] || '';
+    document.getElementById('cabinetName').value = data['櫃位'] || data['櫃位名稱'] || data['Cabinet'] || '';
     
-    // 將 Excel 匯入的單一物品轉換為多物品陣列格式
-    let itemName = data['物品'] || data['物品名稱'] || '';
-    let cabinetQty = data['本櫃數量'] || '';
-    let totalQty = data['全部櫃位總量'] || data['總數量'] || '';
-    multiItems = [{ name: itemName, cabinetQty: cabinetQty, totalQty: totalQty }];
+    let itemNameRaw = String(data['物品'] || data['物品名稱'] || data['品名'] || data['Item'] || '');
+    let cabinetQtyRaw = String(data['本櫃數量'] || data['數量'] || '');
+    let totalQtyRaw = String(data['全部櫃位總量'] || data['總數量'] || data['數量'] || '');
+    
+    let items = itemNameRaw.split(/\r?\n/).filter(i => i.trim() !== '');
+    let cQtys = cabinetQtyRaw.split(/\r?\n/).filter(i => i.trim() !== '');
+    let tQtys = totalQtyRaw.split(/\r?\n/).filter(i => i.trim() !== '');
+
+    multiItems = [];
+    if(items.length > 0) {
+        items.forEach((item, i) => {
+            multiItems.push({
+                name: item.trim(),
+                cabinetQty: cQtys[i] ? cQtys[i].trim() : (cQtys[0] || ''),
+                totalQty: tQtys[i] ? tQtys[i].trim() : (tQtys[0] || '')
+            });
+        });
+    } else {
+        multiItems = [{ name: itemNameRaw, cabinetQty: cabinetQtyRaw, totalQty: totalQtyRaw }];
+    }
     renderMultiItems();
     
     let otherStr = data['其他櫃位與數量'] || data['其他儲放櫃位與數量'] || '';
     locData = [];
     if(otherStr && !otherStr.includes('無其他')) {
-      // 避免換行字元跳脫錯誤，使用正則分割
       const parts = otherStr.split(/\r?\n/);
       parts.forEach(p => {
         let sp = p.split(/：|:/);
