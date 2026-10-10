@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>法鼓山香積室住宿區櫃位標籤產生器</title>
+  <title>倉儲標籤產生器 (支援進度匯出/匯入)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -261,9 +261,14 @@
     <div class="flex flex-col bg-white border-t" style="flex-basis: 30%; min-height: 200px;">
         <div class="p-2 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center text-sm">
             <span>✅ 完成標籤清單</span>
-            <div class="space-x-2">
-                <button onclick="batchPrint()" class="bg-teal-500 hover:bg-teal-600 px-3 py-1 rounded shadow text-white font-bold">🖨️ 批次列印 (雙拼)</button>
-                <button onclick="clearQueue()" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded shadow text-white font-bold">清空清單</button>
+            <div class="space-x-1 flex items-center">
+                <button onclick="exportQueue()" class="bg-indigo-500 hover:bg-indigo-600 px-2 py-1 rounded shadow text-white font-bold text-xs" title="匯出目前的清單進度">💾 匯出進度</button>
+                <label class="bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded shadow text-white font-bold text-xs cursor-pointer" title="匯入之前儲存的進度">
+                    📂 匯入進度
+                    <input type="file" accept=".json" class="hidden" onchange="importQueue(event)">
+                </label>
+                <button onclick="batchPrint()" class="bg-teal-500 hover:bg-teal-600 px-2 py-1 rounded shadow text-white font-bold text-xs ml-2">🖨️ 批次列印</button>
+                <button onclick="clearQueue()" class="bg-red-500 hover:bg-red-600 px-2 py-1 rounded shadow text-white font-bold text-xs">清空清單</button>
             </div>
         </div>
         <div class="flex-1 overflow-y-auto p-3">
@@ -720,6 +725,46 @@
     window.print();
   }
 
+  // --- 進度匯出與匯入 ---
+  function exportQueue() {
+      if(completedLabels.length === 0) {
+          alert('清單內沒有標籤可供匯出！');
+          return;
+      }
+      const dataStr = JSON.stringify(completedLabels);
+      const blob = new Blob([dataStr], {type: "application/json"});
+      const url  = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "倉儲標籤進度備份_" + new Date().getTime() + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  }
+
+  function importQueue(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+          try {
+              const importedQueue = JSON.parse(evt.target.result);
+              if (Array.isArray(importedQueue)) {
+                  completedLabels = completedLabels.concat(importedQueue);
+                  renderQueueList();
+                  alert('成功匯入 ' + importedQueue.length + ' 筆標籤進度！');
+              } else {
+                  alert('檔案格式錯誤！');
+              }
+          } catch (err) {
+              alert('讀取失敗，請確認檔案格式是否正確。');
+          }
+      };
+      reader.readAsText(file);
+      e.target.value = ''; // 允許重複選取相同檔案
+  }
+
   // --- 雲端載入與資料應用邏輯 ---
   async function fetchCloudData() {
       const url = document.getElementById('cloudUrl').value.trim();
@@ -729,9 +774,7 @@
           if(!res.ok) throw new Error("網路連線失敗或網址不正確");
           const text = await res.text();
           
-          // 使用 JS 原生 String 操作代替 Python 易出錯的 Regex
           const lines = text.split('\n');
-          // 簡易 CSV Parser (未處理複雜引號)
           const headers = lines[0].split(',');
           const json = [];
           for(let i=1; i<lines.length; i++) {
@@ -772,7 +815,7 @@
       json.forEach((row, index) => {
         let cabinet = row['櫃位'] || row['櫃位名稱'] || row['Cabinet'] || '未知櫃位';
         let item = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'] || '未知物品';
-        let displayItem = String(item).split('\n')[0].trim(); 
+        let displayItem = String(item).split(/\r?\n/)[0].trim(); 
         sel.innerHTML += `<option value="${index}">[${cabinet}] ${displayItem}</option>`;
       });
       document.getElementById('todoContainer').classList.remove('hidden');
@@ -793,9 +836,9 @@
       let cabinetQtyRaw = String(data['本櫃數量'] || data['數量'] || '');
       let totalQtyRaw = String(data['全部櫃位總量'] || data['總數量'] || data['數量'] || '');
       
-      let items = itemNameRaw.split('\n').filter(i => i.trim() !== '');
-      let cQtys = cabinetQtyRaw.split('\n').filter(i => i.trim() !== '');
-      let tQtys = totalQtyRaw.split('\n').filter(i => i.trim() !== '');
+      let items = itemNameRaw.split(/\r?\n/).filter(i => i.trim() !== '');
+      let cQtys = cabinetQtyRaw.split(/\r?\n/).filter(i => i.trim() !== '');
+      let tQtys = totalQtyRaw.split(/\r?\n/).filter(i => i.trim() !== '');
 
       let newItems = [];
       if(items.length > 0) {
@@ -822,7 +865,7 @@
           let otherStr = data['其他櫃位與數量'] || data['其他儲放櫃位與數量'] || '';
           locData = [];
           if(otherStr && !otherStr.includes('無其他')) {
-            const parts = otherStr.split('\n');
+            const parts = otherStr.split(/\r?\n/);
             parts.forEach(p => {
               let sp = p.split(/：|:/);
               if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
