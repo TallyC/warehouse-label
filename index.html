@@ -42,15 +42,22 @@
           size: A4 portrait; 
           margin: 0; 
       }
+      html, body {
+          margin: 0;
+          padding: 0;
+          width: 210mm;
+          background: white;
+      }
       body * { visibility: hidden; }
       #print-area, #print-area * { visibility: visible; }
-      body { background: white; margin: 0; padding: 0; }
       #print-area {
         display: block;
         position: absolute;
         left: 0;
         top: 0;
-        width: 100%;
+        width: 210mm;
+        margin: 0;
+        padding: 0;
       }
       .print-page {
         width: 210mm;
@@ -58,11 +65,17 @@
         display: flex;
         flex-direction: column;
         page-break-after: always;
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
       }
       .label-card {
+        width: 210mm;
+        height: 148.5mm;
         box-shadow: none;
         border: 1px dashed #ccc;
         margin: 0;
+        box-sizing: border-box;
       }
     }
     
@@ -277,9 +290,9 @@
         <div class="p-2 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center text-sm">
             <span>✅ 完成標籤清單</span>
             <div class="space-x-1 flex items-center">
-                <button onclick="exportQueue()" class="bg-indigo-500 hover:bg-indigo-600 px-2 py-1 rounded shadow text-white font-bold text-xs" title="匯出目前的清單進度">💾 匯出進度</button>
-                <label class="bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded shadow text-white font-bold text-xs cursor-pointer" title="匯入之前儲存的進度">
-                    📂 匯入進度
+                <button onclick="exportQueue()" class="bg-indigo-500 hover:bg-indigo-600 px-2 py-1 rounded shadow text-white font-bold text-xs" title="匯出目前的圖卡">💾 匯出圖卡</button>
+                <label class="bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded shadow text-white font-bold text-xs cursor-pointer" title="匯入之前儲存的圖卡">
+                    📂 匯入圖卡
                     <input type="file" accept=".json" class="hidden" onchange="importQueue(event)">
                 </label>
                 <button onclick="batchPrint()" class="bg-teal-500 hover:bg-teal-600 px-2 py-1 rounded shadow text-white font-bold text-xs ml-2">🖨️ 批次列印</button>
@@ -783,7 +796,7 @@
               if (Array.isArray(importedQueue)) {
                   completedLabels = completedLabels.concat(importedQueue);
                   renderQueueList();
-                  alert('成功匯入 ' + importedQueue.length + ' 筆標籤進度！');
+                  alert('成功匯入 ' + importedQueue.length + ' 筆圖卡資料！');
               } else {
                   alert('檔案格式錯誤！');
               }
@@ -848,9 +861,8 @@
       json.forEach((row, index) => {
         let cabinet = row['櫃位'] || row['櫃位名稱'] || row['Cabinet'] || '未知櫃位';
         let item = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'] || '未知物品';
-        let displayItem = String(item).split(/
-?
-/)[0].trim(); 
+        let displayItem = String(item).split('
+').map(s => s.trim()).filter(s => s)[0] || ''; 
         sel.innerHTML += `<option value="${index}">[${cabinet}] ${displayItem}</option>`;
       });
       document.getElementById('todoContainer').classList.remove('hidden');
@@ -871,23 +883,20 @@
       let cabinetQtyRaw = String(data['本櫃數量'] || data['數量'] || '');
       let totalQtyRaw = String(data['全部櫃位總量'] || data['總數量'] || data['數量'] || '');
       
-      let items = itemNameRaw.split(/
-?
-/).filter(i => i.trim() !== '');
-      let cQtys = cabinetQtyRaw.split(/
-?
-/).filter(i => i.trim() !== '');
-      let tQtys = totalQtyRaw.split(/
-?
-/).filter(i => i.trim() !== '');
+      let items = itemNameRaw.split('
+').map(i => i.trim()).filter(i => i !== '');
+      let cQtys = cabinetQtyRaw.split('
+').map(i => i.trim()).filter(i => i !== '');
+      let tQtys = totalQtyRaw.split('
+').map(i => i.trim()).filter(i => i !== '');
 
       let newItems = [];
       if(items.length > 0) {
           items.forEach((item, i) => {
               newItems.push({
-                  name: item.trim(),
-                  cabinetQty: cQtys[i] ? cQtys[i].trim() : (cQtys[0] || ''),
-                  totalQty: tQtys[i] ? tQtys[i].trim() : (tQtys[0] || '')
+                  name: item,
+                  cabinetQty: cQtys[i] ? cQtys[i] : (cQtys[0] || ''),
+                  totalQty: tQtys[i] ? tQtys[i] : (tQtys[0] || '')
               });
           });
       } else {
@@ -906,9 +915,8 @@
           let otherStr = data['其他櫃位與數量'] || data['其他儲放櫃位與數量'] || '';
           locData = [];
           if(otherStr && !otherStr.includes('無其他')) {
-            const parts = otherStr.split(/
-?
-/);
+            const parts = otherStr.split('
+').map(p => p.trim()).filter(p => p !== '');
             parts.forEach(p => {
               let sp = p.split(/：|:/);
               if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
