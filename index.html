@@ -101,6 +101,7 @@
       <!-- 匯入資料區 -->
       <div class="p-4 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
         <label class="block font-bold text-blue-800">📂 匯入庫存資料</label>
+        <p class="text-xs text-gray-600">選填欄位：顏色、顏色選項、物品顏色或 Color。同列多物品請將物品與顏色依順序換行；單一顏色套用整列，空白表示未提供。多色可填「白色／藍色」。</p>
         <div>
             <label class="block text-xs text-gray-600 mb-1">方法一：貼上 Google 試算表 CSV 連結</label>
             <div class="flex gap-2">
@@ -197,6 +198,10 @@
       <div class="border p-4 rounded-lg shadow-sm bg-blue-50 border-blue-200">
         <div class="flex justify-between items-center mb-3">
           <label class="font-bold text-blue-800">📦 櫃內存放物品清單</label>
+        </div>
+        <div class="flex flex-wrap gap-3 text-sm mb-3">
+          <label><input type="checkbox" id="showItems" checked onchange="updatePreview()"> 顯示物品清單</label>
+          <label><input type="checkbox" id="showColor" checked onchange="updatePreview()"> 顯示顏色</label>
         </div>
         <div id="multiItemsContainer" class="space-y-3"></div>
         <button onclick="addMultiItemRow()" class="w-full mt-3 py-2 border-2 border-dashed border-blue-400 text-blue-600 font-bold rounded hover:bg-blue-100">+ 手動新增一筆物品</button>
@@ -389,6 +394,9 @@
           <div class="bg-white p-2 border border-blue-200 rounded relative shadow-sm">
              <button onclick="removeMultiItem(${idx})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">✖</button>
              <input type="text" class="w-full p-1 border-b border-gray-300 font-bold text-gray-800 focus:outline-none focus:border-blue-500 mb-2" value="${escapeHtml(item.name)}" placeholder="物品名稱" oninput="updateMultiItem(${idx}, 'name', this.value)">
+             <label class="block text-sm text-gray-600 mb-2">顏色選項（選填）
+               <input type="text" class="w-full p-1 border rounded" value="${escapeHtml(item.color || '')}" placeholder="例如：白色／藍色" oninput="updateMultiItem(${idx}, 'color', this.value)">
+             </label>
              <div class="flex gap-2 text-sm">
                  <div class="flex-1 flex items-center bg-yellow-50 px-2 rounded border border-yellow-200">
                      <span class="text-yellow-700 whitespace-nowrap mr-1">本櫃</span>
@@ -403,7 +411,7 @@
       `).join('');
       updatePreview();
   }
-  function addMultiItemRow() { multiItems.push({ name: "新物品", cabinetQty: "0", totalQty: "0" }); renderMultiItems(); }
+  function addMultiItemRow() { multiItems.push({ name: "新物品", color: "", cabinetQty: "0", totalQty: "0" }); renderMultiItems(); }
   function removeMultiItem(idx) { multiItems.splice(idx, 1); renderMultiItems(); }
   function updateMultiItem(idx, field, val) { multiItems[idx][field] = val; updatePreview(); }
 
@@ -419,6 +427,7 @@
 
     const cabinetName = escapeHtml(document.getElementById('cabinetName').value);
     const showQty = document.getElementById('showQty').checked;
+    const showColor = document.getElementById('showColor').checked;
     
     const headerTitleSize = document.getElementById('headerTitleSize').value || 14;
     const cabinetNameSize = document.getElementById('cabinetNameSize').value || 32;
@@ -435,16 +444,13 @@
     
     document.getElementById('imageInputSection').style.display = showImage ? 'block' : 'none';
 
-    // 提醒 (支援換行，將 
- 轉換為 <br>，避免 html2canvas 排版崩潰，完全用 div 代替 gap)
+    // 提醒 (支援換行，將換行轉換為 <br>，避免 html2canvas 排版崩潰，完全用 div 代替 gap)
     const showNote = document.getElementById('showNote').checked;
-    const specialNote = escapeHtml(document.getElementById('specialNote').value).replace(/
-/g, '<br>');
+    const specialNote = escapeHtml(document.getElementById('specialNote').value).replace(/\r?\n/g, '<br>');
     const noteSize = document.getElementById('noteSize').value || 18;
 
     const showFold = document.getElementById('showFold').checked;
-    const foldNote = escapeHtml(document.getElementById('foldNote').value).replace(/
-/g, '<br>');
+    const foldNote = escapeHtml(document.getElementById('foldNote').value).replace(/\r?\n/g, '<br>');
     const foldSize = document.getElementById('foldSize').value || 18;
 
     // --- 1. 物品與數量清單區塊 (mod_multiItems) ---
@@ -452,6 +458,7 @@
     let multiItemsInnerHtml = multiItems.map(item => `
         <div class="multi-item-row" style="margin-bottom: ${gapSize/2}px;">
             <div class="text-gray-800 font-black mb-2" style="font-size: ${itemNameSize}px; line-height: 1.2;">${escapeHtml(item.name)}</div>
+            ${showColor && String(item.color || '').trim() ? `<div class="text-gray-700 mb-2" style="font-size: ${baseTextSize}px; white-space: pre-wrap; overflow-wrap: anywhere;">顏色：${escapeHtml(item.color)}</div>` : ''}
             ${showQty ? `
             <div class="flex justify-between items-center">
                 <div class="bg-yellow-50 border-2 border-yellow-400 rounded-lg px-3 py-1 flex items-center justify-between shadow-sm" style="width: 48%;">
@@ -531,7 +538,7 @@
 
     // --- 根據拖曳順序組合欄位 ---
     const modHtmlMap = {
-        'mod_multiItems': html_multiItems,
+        'mod_multiItems': document.getElementById('showItems').checked ? html_multiItems : '',
         'mod_image': showImage ? html_image : '',
         'mod_loc': html_loc,
         'mod_note': html_note
@@ -670,6 +677,8 @@
     const rawState = {
       cabinetName: cabinet,
       showQty: document.getElementById('showQty').checked,
+      showItems: document.getElementById('showItems').checked,
+      showColor: document.getElementById('showColor').checked,
       headerTitleSize: document.getElementById('headerTitleSize').value,
       cabinetNameSize: document.getElementById('cabinetNameSize').value,
       itemNameSize: document.getElementById('itemNameSize').value,
@@ -705,6 +714,8 @@
     
     document.getElementById('cabinetName').value = state.cabinetName;
     if(state.showQty !== undefined) document.getElementById('showQty').checked = state.showQty;
+    document.getElementById('showItems').checked = state.showItems !== false;
+    document.getElementById('showColor').checked = state.showColor !== false;
     
     if(state.headerTitleSize) document.getElementById('headerTitleSize').value = state.headerTitleSize;
     document.getElementById('cabinetNameSize').value = state.cabinetNameSize;
@@ -888,18 +899,8 @@
           if(!res.ok) throw new Error("網路連線失敗或網址不正確");
           const text = await res.text();
           
-          const lines = text.split('\n');
-          const headers = lines[0].split(',');
-          const json = [];
-          for(let i=1; i<lines.length; i++) {
-              if(!lines[i].trim()) continue;
-              const cols = lines[i].split(',');
-              const obj = {};
-              headers.forEach((h, j) => {
-                  obj[h.trim()] = cols[j] ? cols[j].trim() : '';
-              });
-              json.push(obj);
-          }
+          const workbook = XLSX.read(text, {type: 'string', raw: true});
+          const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ''});
           processImportedJson(json);
       } catch (err) {
           alert("雲端讀取失敗。請確認連結是否為發布的 CSV 格式。\n錯誤細節：" + err.message);
@@ -930,7 +931,7 @@
         let cabinet = row['櫃位'] || row['櫃位名稱'] || row['Cabinet'] || '未知櫃位';
         let item = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'] || '未知物品';
         let displayItem = String(item).split(/\r?\n/)[0].trim(); 
-        sel.innerHTML += `<option value="${index}">[${cabinet}] ${displayItem}</option>`;
+        sel.innerHTML += `<option value="${index}">[${escapeHtml(cabinet)}] ${escapeHtml(displayItem)}</option>`;
       });
       document.getElementById('todoContainer').classList.remove('hidden');
       alert(`成功匯入 ${json.length} 筆資料！請由下方下拉選單操作。`);
@@ -947,24 +948,27 @@
       const data = importedData[idx];
       
       let itemNameRaw = String(data['物品'] || data['物品名稱'] || data['品名'] || data['Item'] || '');
-      let cabinetQtyRaw = String(data['本櫃數量'] || data['數量'] || '');
-      let totalQtyRaw = String(data['全部櫃位總量'] || data['總數量'] || data['數量'] || '');
+      let cabinetQtyRaw = String(data['本櫃數量'] ?? data['數量'] ?? '');
+      let totalQtyRaw = String(data['全部櫃位總量'] ?? data['總數量'] ?? data['數量'] ?? '');
       
       let items = itemNameRaw.split(/\r?\n/).map(i => i.trim()).filter(i => i !== '');
       let cQtys = cabinetQtyRaw.split(/\r?\n/).map(i => i.trim()).filter(i => i !== '');
       let tQtys = totalQtyRaw.split(/\r?\n/).map(i => i.trim()).filter(i => i !== '');
 
+      const colorRaw = String(data['顏色'] ?? data['顏色選項'] ?? data['物品顏色'] ?? data['Color'] ?? data['color'] ?? '');
+      const colors = colorRaw.split(/\r?\n/).map(c => c.trim());
       let newItems = [];
       if(items.length > 0) {
           items.forEach((item, i) => {
               newItems.push({
                   name: item,
+                  color: colors.length === 1 ? colors[0] : (colors[i] || ''),
                   cabinetQty: cQtys[i] ? cQtys[i] : (cQtys[0] || ''),
                   totalQty: tQtys[i] ? tQtys[i] : (tQtys[0] || '')
               });
           });
       } else {
-          newItems = [{ name: itemNameRaw, cabinetQty: cabinetQtyRaw, totalQty: totalQtyRaw }];
+          newItems = [{ name: itemNameRaw, color: colorRaw.trim(), cabinetQty: cabinetQtyRaw, totalQty: totalQtyRaw }];
       }
 
       if (append) {
