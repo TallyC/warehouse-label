@@ -366,6 +366,10 @@
       } else {
           section.classList.toggle('hidden');
       }
+      if(sectionId === 'locSection') {
+          document.getElementById('showOtherLocs').checked = section.style.display !== 'none' && !section.classList.contains('hidden');
+          updatePreview();
+      }
   }
 
   // --- 拖曳版面配置邏輯 ---
