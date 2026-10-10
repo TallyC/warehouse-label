@@ -771,7 +771,7 @@
     renderQueueList();
     updatePreview();
     
-    document.querySelector('.w-1\/3.overflow-y-auto').scrollTo(0,0);
+    document.getElementById('multiItemsContainer').scrollIntoView({block: 'start'});
   }
 
   function renderQueueList() {
@@ -914,7 +914,9 @@
     reader.onload = function(e) {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
+        const workbook = /\.csv$/i.test(file.name)
+          ? XLSX.read(new TextDecoder('utf-8').decode(data), {type: 'string', raw: true})
+          : XLSX.read(data, {type: 'array'});
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
         processImportedJson(json);
