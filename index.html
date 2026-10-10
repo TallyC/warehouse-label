@@ -103,12 +103,16 @@
         <label class="block font-bold text-blue-800">📂 匯入庫存資料</label>
         <p class="text-xs text-gray-600">選填欄位：顏色、顏色選項、物品顏色或 Color。同列多物品請將物品與顏色依順序換行；單一顏色套用整列，空白表示未提供。多色可填「白色／藍色」。</p>
         <div>
-            <label class="block text-xs text-gray-600 mb-1">方法一：貼上 Google 試算表 CSV 連結</label>
+            <label class="block text-xs text-gray-600 mb-1">方法一：貼上 Google 試算表分頁連結或發布的 CSV 連結</label>
             <div class="flex gap-2">
                 <input type="text" id="cloudUrl" placeholder="https://docs.google.com/.../pub?output=csv" class="flex-1 p-2 border rounded text-sm">
                 <button onclick="fetchCloudData()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-bold shrink-0">雲端載入</button>
             </div>
         </div>
+        <label class="block text-xs text-gray-600">指定分頁 gid（選填；留白沿用連結中的 gid）
+          <input id="cloudGid" type="text" inputmode="numeric" placeholder="分頁網址 #gid= 後面的數字" class="w-full p-2 border rounded text-sm">
+        </label>
+        <p class="text-xs text-gray-600">分頁需可公開讀取或已發布為 CSV；私人試算表無法直接載入。請只發布需要使用的分頁。</p>
         <div class="text-center text-gray-400 text-xs font-bold">--- 或 ---</div>
         <div>
             <label class="block text-xs text-gray-600 mb-1">方法二：上傳本地端 Excel 檔案</label>
@@ -241,6 +245,7 @@
             <input type="checkbox" id="noOtherLocsFlag" onchange="toggleNoOtherLocs()"> 本櫃限定(無其他區)
           </label>
         </div>
+        <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" id="showOtherLocs" checked onchange="updatePreview()"> 顯示其他櫃位區塊</label>
         <div id="locSection" class="transition-all duration-300">
             <div id="otherLocsContainer">
               <ul id="locList" class="space-y-2"></ul>
@@ -539,7 +544,7 @@
     const modHtmlMap = {
         'mod_multiItems': document.getElementById('showItems').checked ? html_multiItems : '',
         'mod_image': showImage ? html_image : '',
-        'mod_loc': html_loc,
+        'mod_loc': document.getElementById('showOtherLocs').checked ? html_loc : '',
         'mod_note': html_note
     };
 
@@ -693,6 +698,7 @@
       imageHeight: document.getElementById('imageHeight').value,
       imageSrc: document.getElementById('imageUpload').dataset.src || '',
       imageUrl: document.getElementById('imageUrl').value,
+      showOtherLocs: document.getElementById('showOtherLocs').checked,
       noOtherLocs: document.getElementById('noOtherLocsFlag').checked,
       locData: JSON.parse(JSON.stringify(locData)),
       showNote: document.getElementById('showNote').checked,
@@ -754,6 +760,7 @@
     }
     document.getElementById('imageUrl').value = state.imageUrl || '';
 
+    document.getElementById('showOtherLocs').checked = state.showOtherLocs !== false;
     document.getElementById('noOtherLocsFlag').checked = state.noOtherLocs;
     locData = JSON.parse(JSON.stringify(state.locData));
     renderLocList();
@@ -890,13 +897,38 @@
   }
 
   // --- 雲端載入與資料應用邏輯 ---
+  function resolveCloudCsvUrl(input, explicitGid = '') {
+      const url = new URL(input);
+      if(url.protocol !== 'https:') throw new Error('請使用 HTTPS 連結');
+      const gid = explicitGid.trim() || url.searchParams.get('gid') || new URLSearchParams(url.hash.slice(1)).get('gid') || '';
+      if(gid && !/^\d+$/.test(gid)) throw new Error('分頁 gid 必須是數字');
+      if(url.hostname === 'docs.google.com') {
+          if(/\/spreadsheets\/d\/e\//.test(url.pathname)) {
+              url.pathname = url.pathname.replace(/\/(pubhtml|pub)\/?$/, '/pub');
+              url.searchParams.set('output', 'csv');
+              url.searchParams.set('single', 'true');
+          } else {
+              const match = url.pathname.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+              if(!match) throw new Error('無法辨識 Google 試算表連結');
+              if(!gid) throw new Error('請貼上含 gid 的分頁連結，或填寫分頁 gid（第一個分頁通常為 0）');
+              url.pathname = '/spreadsheets/d/' + match[1] + '/export';
+              url.search = '';
+              url.searchParams.set('format', 'csv');
+          }
+          if(gid) url.searchParams.set('gid', gid);
+          url.hash = '';
+      }
+      return url.href;
+  }
   async function fetchCloudData() {
       const url = document.getElementById('cloudUrl').value.trim();
       if(!url) return alert("請輸入 Google 試算表的 CSV 連結！");
       try {
-          const res = await fetch(url);
+          const csvUrl = resolveCloudCsvUrl(url, document.getElementById('cloudGid').value);
+          const res = await fetch(csvUrl);
           if(!res.ok) throw new Error("網路連線失敗或網址不正確");
           const text = await res.text();
+          if(/^\s*(<!doctype|<html)/i.test(text)) throw new Error('收到網頁而非 CSV，請確認指定分頁已公開或發布');
           
           const workbook = XLSX.read(text, {type: 'string', raw: true});
           const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ''});
