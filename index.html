@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>倉儲櫃位標籤系統(支援PNG下載與A4雙拼)</title>
+  <title>倉儲標籤產生器 (支援批次雙拼)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -20,34 +20,43 @@
       overflow: hidden;
       padding: 12mm;
       box-sizing: border-box;
+      flex-shrink: 0;
+    }
+
+    .preview-container {
+        transform: scale(0.8);
+        transform-origin: top center;
+        margin-bottom: -30mm; /* 縮放後補回空間 */
     }
 
     .drag-handle { cursor: grab; }
     .drag-handle:active { cursor: grabbing; }
     .dragging { opacity: 0.5; background: #e5e7eb; }
 
+    #print-area { display: none; }
+
     @media print {
       body * { visibility: hidden; }
       #print-area, #print-area * { visibility: visible; }
       body { background: white; margin: 0; padding: 0; }
       #print-area {
+        display: block;
         position: absolute;
         left: 0;
         top: 0;
+        width: 100%;
+      }
+      .print-page {
         width: 210mm;
+        height: 297mm;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        gap: 0;
+        page-break-after: always;
       }
       .label-card {
         box-shadow: none;
-        border: 1px dashed #ccc;
+        border: 1px dashed #ccc; /* 裁切線 */
         margin: 0;
-        page-break-inside: avoid;
-      }
-      .label-card:nth-child(2n) {
-        page-break-after: always;
       }
     }
   </style>
@@ -57,37 +66,27 @@
   <!-- 左側編輯區 -->
   <div class="w-1/3 h-full bg-white border-r border-gray-200 flex flex-col shadow-lg z-10 print:hidden">
     <div class="p-4 bg-teal-600 text-white flex justify-between items-center shrink-0">
-      <h1 class="text-xl font-bold flex items-center gap-2">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-        標籤資料設定
-      </h1>
-      <div class="flex gap-2">
-        <button onclick="downloadPNG()" class="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm shadow flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> PNG
-        </button>
-        <button onclick="window.print()" class="bg-teal-800 hover:bg-teal-900 px-3 py-1 rounded text-sm shadow">列印</button>
-      </div>
+      <h1 class="text-xl font-bold flex items-center gap-2">標籤資料設定</h1>
+      <button onclick="downloadPreviewPNG()" class="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-sm shadow">單張 PNG 下載</button>
     </div>
 
     <div class="flex-1 overflow-y-auto p-5 space-y-6">
+      
+      <!-- Excel 匯入 -->
       <div class="p-4 border border-blue-200 rounded-lg bg-blue-50">
-        <label class="block font-bold text-blue-800 mb-2 flex items-center gap-2">
-           匯入試算表 (.xlsx/.csv)
-        </label>
+        <label class="block font-bold text-blue-800 mb-2">匯入試算表 (.xlsx/.csv)</label>
         <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200" onchange="handleExcelUpload(event)">
         <select id="todoList" class="mt-3 w-full p-2 border border-blue-300 rounded hidden" onchange="loadTodoItem(this.value)">
           <option value="">-- 請選擇待處理項目 --</option>
         </select>
       </div>
 
+      <!-- 基本資訊 -->
       <div class="space-y-4">
-        <h2 class="text-lg font-bold text-gray-800 border-b pb-2">基本資訊</h2>
-        
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">本標籤張貼櫃位 (Cabinet ID)</label>
           <input type="text" id="cabinetName" value="立櫃 01-中" class="w-full p-2 border rounded border-gray-300" oninput="updatePreview()">
         </div>
-
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">物品名稱</label>
           <div class="flex gap-2">
@@ -96,7 +95,6 @@
             <span class="py-2 text-sm text-gray-500">px</span>
           </div>
         </div>
-
         <div class="flex gap-4">
           <div class="flex-1 p-3 border-2 border-yellow-400 bg-yellow-50 rounded-lg relative">
             <span class="absolute -top-3 left-2 bg-yellow-400 text-xs px-2 py-1 rounded font-bold text-yellow-900">⭐ 本櫃應備數</span>
@@ -109,18 +107,21 @@
         </div>
       </div>
 
+      <!-- 圖片上傳 -->
       <div>
         <label class="block text-sm font-bold text-gray-700 mb-1">物品圖片</label>
         <input type="file" id="imageUpload" accept="image/*" class="w-full text-sm mb-2" onchange="handleImageUpload(event)">
         <input type="text" id="imageUrl" placeholder="或貼上圖片網址" class="w-full p-2 border rounded text-sm" oninput="updateImageFromUrl()">
       </div>
 
+      <!-- 收納順序 -->
       <div class="border p-4 rounded-lg">
         <label class="block font-bold text-gray-700 mb-2">歸位收納順序 (可拖曳排序)</label>
         <ul id="orderList" class="space-y-2"></ul>
         <button onclick="addOrderRow()" class="mt-2 text-sm text-teal-600 font-bold hover:underline">+ 新增步驟</button>
       </div>
 
+      <!-- 其他儲放區 -->
       <div class="border p-4 rounded-lg bg-gray-50">
         <div class="flex justify-between items-center mb-2">
           <label class="font-bold text-gray-700">其他儲放區</label>
@@ -134,6 +135,7 @@
         </div>
       </div>
 
+      <!-- 提醒 -->
       <div class="border border-red-200 p-4 rounded-lg bg-red-50">
         <div class="flex justify-between items-center mb-2">
           <label class="font-bold text-red-700">收納特別提醒</label>
@@ -150,28 +152,50 @@
       </div>
 
       <button onclick="saveLabelToQueue()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-lg">
-        加入完成標籤區 (右側)
+        🔽 儲存至完成清單
       </button>
 
     </div>
   </div>
 
-  <!-- 右側預覽與完成區 -->
-  <div class="w-2/3 h-full bg-gray-200 flex flex-col print:w-full print:h-auto">
-    <div class="p-3 bg-gray-800 text-white font-bold shrink-0 print:hidden flex justify-between items-center">
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-        即時預覽
-      </div>
-      <button onclick="clearQueue()" class="text-sm text-red-400 hover:text-red-300">清空完成區</button>
-    </div>
+  <!-- 右側區域：上半部預覽，下半部清單 -->
+  <div class="w-2/3 h-full bg-gray-200 flex flex-col print:w-full print:h-auto print:hidden">
     
-    <div class="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-8 print:p-0" id="print-area">
-      <div id="livePreview" class="label-card print:hidden"></div>
-      <div class="w-full border-t-2 border-dashed border-gray-400 print:hidden my-4"></div>
-      <div id="queueContainer" class="w-full flex flex-col items-center gap-8 print:gap-0"></div>
+    <!-- 上半部：即時預覽 -->
+    <div class="h-1/2 flex flex-col">
+        <div class="p-3 bg-gray-800 text-white font-bold shrink-0">👁️ 即時預覽 (Live Preview)</div>
+        <div class="flex-1 overflow-y-auto p-4 flex justify-center bg-gray-300">
+            <div class="preview-container">
+                <div id="livePreview" class="label-card"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分隔線 -->
+    <div class="h-1 bg-gray-400 shrink-0 shadow-inner"></div>
+
+    <!-- 下半部：完成清單區 -->
+    <div class="h-1/2 flex flex-col bg-white">
+        <div class="p-3 bg-gray-700 text-white font-bold shrink-0 flex justify-between items-center">
+            <span>✅ 完成標籤清單</span>
+            <div class="space-x-2">
+                <button onclick="batchPrint()" class="bg-teal-500 hover:bg-teal-600 px-3 py-1 rounded text-sm shadow text-white font-bold">🖨️ 批次列印 (雙拼連續頁)</button>
+                <button onclick="clearQueue()" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm shadow">清空清單</button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+            <div class="mb-2">
+                <label class="cursor-pointer font-bold text-sm text-gray-700"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" checked> 全選</label>
+            </div>
+            <div id="queueList" class="space-y-2 border-t pt-2">
+                <div class="text-gray-500 text-sm text-center py-4">目前無完成的標籤，請點擊左側底部「儲存至完成清單」。</div>
+            </div>
+        </div>
     </div>
   </div>
+
+  <!-- 列印專用隱藏區塊 -->
+  <div id="print-area"></div>
 
 <script>
   let orderData = [
@@ -180,13 +204,12 @@
     { text: "立櫃 02-上 (高處儲位)", isTarget: false },
     { text: "活動立櫃-2左 (自助取用櫃)", isTarget: false }
   ];
-
   let locData = [
     { name: "立櫃 02-上", qty: "32件" },
     { name: "立櫃 02-下", qty: "42件" }
   ];
-
   let importedData = [];
+  let completedLabels = []; // 存放已完成標籤的陣列
 
   function init() {
     renderOrderList();
@@ -200,13 +223,11 @@
     const cabinetName = document.getElementById('cabinetName').value;
     const cabinetQty = document.getElementById('cabinetQty').value;
     const totalQty = document.getElementById('totalQty').value;
-    const imgSrc = document.getElementById('imageUpload').dataset.src || document.getElementById('imageUrl').value || 'https://via.placeholder.com/400x200?text=圖片區塊';
-    
+    const imgSrc = document.getElementById('imageUpload').dataset.src || document.getElementById('imageUrl').value || 'https://via.placeholder.com/400x200?text=無圖片';
     const showNote = document.getElementById('showNote').checked;
     const specialNote = document.getElementById('specialNote').value;
     const noteSize = document.getElementById('noteSize').value;
     document.getElementById('noteContainer').style.display = showNote ? 'block' : 'none';
-
     const showOtherLocs = document.getElementById('showOtherLocs').checked;
     document.getElementById('otherLocsContainer').style.display = showOtherLocs ? 'block' : 'none';
 
@@ -225,22 +246,16 @@
     `).join('');
 
     const html = `
-      <div class="h-full flex flex-col relative">
+      <div class="h-full flex flex-col relative bg-white">
         <div class="flex justify-between items-end border-b-4 border-teal-600 pb-3 mb-4 shrink-0">
-          <div class="bg-teal-500 text-white px-6 py-2 rounded-t-lg rounded-br-lg text-2xl font-bold flex items-center gap-2 shadow-sm">
-            📍 ${cabinetName}
-          </div>
-          <div class="text-gray-800 font-black" style="font-size: ${itemNameSize}px; line-height: 1;">
-            ${itemName}
-          </div>
+          <div class="bg-teal-500 text-white px-6 py-2 rounded-t-lg rounded-br-lg text-2xl font-bold flex items-center gap-2 shadow-sm">📍 ${cabinetName}</div>
+          <div class="text-gray-800 font-black" style="font-size: ${itemNameSize}px; line-height: 1;">${itemName}</div>
         </div>
-
         <div class="flex flex-1 gap-6 min-h-0">
           <div class="w-1/2 flex flex-col gap-4 h-full">
-            <div class="flex-1 border rounded-lg p-2 flex items-center justify-center overflow-hidden relative group">
+            <div class="flex-1 border rounded-lg p-2 flex items-center justify-center overflow-hidden">
               <img src="${imgSrc}" class="max-h-full max-w-full object-contain">
             </div>
-            
             <div class="flex gap-3 shrink-0">
               <div class="flex-1 bg-yellow-50 border-2 border-yellow-400 rounded-xl p-3 flex flex-col justify-center items-center">
                 <span class="text-yellow-800 text-sm font-bold mb-1">本櫃應備數</span>
@@ -251,7 +266,6 @@
                 <span class="text-blue-600 text-3xl font-black">${totalQty} <span class="text-lg">件</span></span>
               </div>
             </div>
-
             ${showNote ? `
             <div class="bg-red-50 border-2 border-red-400 text-red-700 rounded-lg p-3 shrink-0">
               <div class="font-black flex items-center gap-2 mb-1"><span class="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">!</span> 收納提醒</div>
@@ -259,35 +273,29 @@
             </div>
             ` : ''}
           </div>
-
           <div class="w-1/2 flex flex-col gap-4 h-full overflow-hidden">
             <div class="border-2 border-gray-200 rounded-xl p-4 flex-1 flex flex-col min-h-0">
               <div class="font-bold text-gray-700 mb-3 flex items-center gap-2 shrink-0">
                 <span class="text-xl">📥</span> 歸位收納優先順序
               </div>
-              <div class="space-y-2 overflow-y-auto pr-1">
-                ${orderHtml}
-              </div>
+              <div class="space-y-2 overflow-y-auto pr-1">${orderHtml}</div>
             </div>
-
             ${showOtherLocs ? `
             <div class="border-2 border-gray-200 rounded-xl p-4 shrink-0 max-h-[40%] flex flex-col">
               <div class="font-bold text-gray-700 mb-2 flex items-center gap-2 shrink-0">
                 <span class="text-xl">🔍</span> 其他儲放區
               </div>
-              <div class="flex-1 overflow-y-auto pr-1">
-                ${locHtml}
-              </div>
+              <div class="flex-1 overflow-y-auto pr-1">${locHtml}</div>
             </div>
             ` : ''}
           </div>
         </div>
       </div>
     `;
-
     document.getElementById('livePreview').innerHTML = html;
   }
 
+  /* 拖曳與表單操作保留原本邏輯 */
   let draggedIndex = null;
   function renderOrderList() {
     const list = document.getElementById('orderList');
@@ -301,21 +309,10 @@
     `).join('');
     updatePreview();
   }
-
   function dragStart(e, idx) { draggedIndex = idx; e.target.classList.add('dragging'); }
   function dragOver(e) { e.preventDefault(); }
-  function drop(e, targetIdx) {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === targetIdx) return;
-    const item = orderData.splice(draggedIndex, 1)[0];
-    orderData.splice(targetIdx, 0, item);
-    renderOrderList();
-  }
-  function dragEnd() {
-    document.querySelectorAll('.dragging').forEach(i => i.classList.remove('dragging'));
-    draggedIndex = null;
-  }
-
+  function drop(e, targetIdx) { e.preventDefault(); if (draggedIndex === null || draggedIndex === targetIdx) return; const item = orderData.splice(draggedIndex, 1)[0]; orderData.splice(targetIdx, 0, item); renderOrderList(); }
+  function dragEnd() { document.querySelectorAll('.dragging').forEach(i => i.classList.remove('dragging')); draggedIndex = null; }
   function addOrderRow() { orderData.push({ text: "新步驟", isTarget: false }); renderOrderList(); }
   function removeOrderRow(idx) { orderData.splice(idx, 1); renderOrderList(); }
   function updateOrderText(idx, val) { orderData[idx].text = val; updatePreview(); }
@@ -332,7 +329,6 @@
     `).join('');
     updatePreview();
   }
-
   function addLocRow() { locData.push({ name: "", qty: "" }); renderLocList(); }
   function removeLocRow(idx) { locData.splice(idx, 1); renderLocList(); }
   function updateLocName(idx, val) { locData[idx].name = val; updatePreview(); }
@@ -342,59 +338,113 @@
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = function(evt) {
-        document.getElementById('imageUpload').dataset.src = evt.target.result;
-        updatePreview();
-      };
+      reader.onload = function(evt) { document.getElementById('imageUpload').dataset.src = evt.target.result; updatePreview(); };
       reader.readAsDataURL(file);
     }
   }
-
   function updateImageFromUrl() {
-    let url = document.getElementById('imageUrl').value.trim();
-    document.getElementById('imageUpload').dataset.src = url;
+    document.getElementById('imageUpload').dataset.src = document.getElementById('imageUrl').value.trim();
     updatePreview();
   }
 
-  function downloadPNG() {
-    const element = document.getElementById('livePreview');
-    html2canvas(element, { scale: 2 }).then(canvas => {
+  function downloadPreviewPNG() {
+    html2canvas(document.getElementById('livePreview'), { scale: 2 }).then(canvas => {
       const link = document.createElement('a');
-      link.download = document.getElementById('itemName').value + '_標籤.png';
+      link.download = document.getElementById('itemName').value + '_單張標籤.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
     });
   }
 
+  /* ======== 完成清單與批次列印邏輯 ======== */
   function saveLabelToQueue() {
-    const container = document.getElementById('queueContainer');
-    const previewContent = document.getElementById('livePreview').innerHTML;
-    const wrapper = document.createElement('div');
-    wrapper.className = 'label-card';
-    wrapper.innerHTML = previewContent;
+    const html = document.getElementById('livePreview').innerHTML;
+    const name = document.getElementById('itemName').value;
+    const cabinet = document.getElementById('cabinetName').value;
     
-    const delBtn = document.createElement('button');
-    delBtn.innerHTML = '刪除此標籤';
-    delBtn.className = 'absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded print:hidden opacity-0 hover:opacity-100 transition-opacity';
-    delBtn.onclick = function() { wrapper.remove(); };
-    wrapper.appendChild(delBtn);
-    wrapper.onmouseenter = () => delBtn.classList.remove('opacity-0');
-    wrapper.onmouseleave = () => delBtn.classList.add('opacity-0');
-
-    container.appendChild(wrapper);
+    completedLabels.push({ id: Date.now(), name, cabinet, html });
+    renderQueueList();
     
     const sel = document.getElementById('todoList');
-    if (sel.value !== "") {
-      sel.options[sel.selectedIndex].text = "✅ " + sel.options[sel.selectedIndex].text.replace("✅ ", "");
+    if (sel.value !== "") sel.options[sel.selectedIndex].text = "✅ " + sel.options[sel.selectedIndex].text.replace("✅ ", "");
+  }
+
+  function renderQueueList() {
+    const container = document.getElementById('queueList');
+    if(completedLabels.length === 0) {
+        container.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">目前無完成的標籤，請點擊左側底部「儲存至完成清單」。</div>';
+        return;
     }
+    
+    container.innerHTML = completedLabels.map((item, idx) => `
+      <div class="flex items-center justify-between p-3 border-b hover:bg-gray-50">
+        <label class="flex items-center gap-3 cursor-pointer flex-1">
+            <input type="checkbox" class="queue-checkbox w-4 h-4 text-teal-600" data-idx="${idx}" checked>
+            <div>
+                <span class="inline-block bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded font-bold mr-2">${item.cabinet}</span>
+                <span class="font-bold text-gray-700">${item.name}</span>
+            </div>
+        </label>
+        <button onclick="removeQueueItem(${idx})" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-sm font-bold">刪除</button>
+      </div>
+    `).join('');
+  }
+
+  function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('.queue-checkbox');
+    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+  }
+
+  function removeQueueItem(idx) {
+    completedLabels.splice(idx, 1);
+    renderQueueList();
   }
 
   function clearQueue() {
-    if(confirm('確定要清空右側所有已完成的標籤嗎？')) {
-      document.getElementById('queueContainer').innerHTML = '';
+    if(confirm('確定要清空清單內所有標籤嗎？')) {
+      completedLabels = [];
+      renderQueueList();
     }
   }
 
+  function batchPrint() {
+    const checkboxes = document.querySelectorAll('.queue-checkbox:checked');
+    if(checkboxes.length === 0) {
+        alert('請至少勾選一張標籤進行列印！');
+        return;
+    }
+
+    const printArea = document.getElementById('print-area');
+    printArea.innerHTML = '';
+    
+    // 取得所有勾選的 HTML
+    const selectedHtmls = Array.from(checkboxes).map(cb => {
+        const idx = parseInt(cb.getAttribute('data-idx'));
+        return completedLabels[idx].html;
+    });
+
+    // 組合 A4 雙拼 (每頁塞 2 張 A5)
+    for(let i = 0; i < selectedHtmls.length; i += 2) {
+        const page = document.createElement('div');
+        page.className = 'print-page';
+        
+        const card1 = document.createElement('div');
+        card1.className = 'label-card';
+        card1.innerHTML = selectedHtmls[i];
+        page.appendChild(card1);
+
+        if(i + 1 < selectedHtmls.length) {
+            const card2 = document.createElement('div');
+            card2.className = 'label-card';
+            card2.innerHTML = selectedHtmls[i+1];
+            page.appendChild(card2);
+        }
+        printArea.appendChild(page);
+    }
+    window.print();
+  }
+
+  /* ======== Excel 匯入邏輯 ======== */
   function handleExcelUpload(e) {
     const file = e.target.files[0];
     if(!file) return;
@@ -403,8 +453,7 @@
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, {type: 'array'});
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
         
         importedData = json;
@@ -416,10 +465,8 @@
           sel.innerHTML += `<option value="${index}">[${cabinet}] ${item}</option>`;
         });
         sel.classList.remove('hidden');
-        alert(`成功匯入 ${json.length} 筆資料！請由下拉選單選取進行編輯。`);
-      } catch (err) {
-        alert("讀取 Excel 失敗，請確認檔案格式是否正確。\n錯誤訊息: " + err.message);
-      }
+        alert(`成功匯入 ${json.length} 筆資料！`);
+      } catch (err) { alert("讀取 Excel 失敗。\n錯誤訊息: " + err.message); }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -427,7 +474,6 @@
   function loadTodoItem(idx) {
     if(idx === "") return;
     const data = importedData[idx];
-    
     document.getElementById('cabinetName').value = data['櫃位'] || data['櫃位名稱'] || '';
     document.getElementById('itemName').value = data['物品'] || data['物品名稱'] || '';
     document.getElementById('cabinetQty').value = data['本櫃數量'] || '';
@@ -438,20 +484,14 @@
     if(otherStr && !otherStr.includes('無其他')) {
       const parts = otherStr.split('\n');
       parts.forEach(p => {
-        if(p.includes('：') || p.includes(':')) {
-          let sp = p.split(/：|:/);
-          if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
-        }
+        let sp = p.split(/：|:/);
+        if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
       });
     }
     renderLocList();
     
-    orderData = [
-      { text: document.getElementById('cabinetName').value + " (本櫃)", isTarget: true }
-    ];
-    locData.forEach(l => {
-      orderData.push({ text: l.name, isTarget: false });
-    });
+    orderData = [{ text: document.getElementById('cabinetName').value + " (本櫃)", isTarget: true }];
+    locData.forEach(l => { orderData.push({ text: l.name, isTarget: false }); });
     renderOrderList();
     updatePreview();
   }
