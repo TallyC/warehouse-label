@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>倉儲標籤產生器 (支援多物品/無備用區)</title>
+  <title>倉儲標籤產生器 (完整修復版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -75,6 +75,15 @@
 
     <div class="flex-1 overflow-y-auto p-5 space-y-4">
       
+      <!-- Excel 匯入 -->
+      <div class="p-4 border border-blue-200 rounded-lg bg-blue-50">
+        <label class="block font-bold text-blue-800 mb-2">匯入試算表 (.xlsx/.csv)</label>
+        <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200" onchange="handleExcelUpload(event)">
+        <select id="todoList" class="mt-3 w-full p-2 border border-blue-300 rounded hidden" onchange="loadTodoItem(this.value)">
+          <option value="">-- 請選擇待處理項目 --</option>
+        </select>
+      </div>
+
       <!-- 櫃位與版面設定 -->
       <div class="space-y-3 border p-4 rounded-lg bg-white shadow-sm">
         <div class="flex items-center justify-between">
@@ -247,7 +256,7 @@
     renderMultiItems();
     renderOrderList();
     renderLocList();
-    toggleNoOtherLocs(true); // 預設初始化為無其他區
+    toggleNoOtherLocs(true);
     updatePreview();
   }
   
@@ -314,24 +323,20 @@
   function updatePreview() {
     const cabinetName = document.getElementById('cabinetName').value;
     
-    // 字級與間距
     const cabinetNameSize = document.getElementById('cabinetNameSize').value || 26;
     const itemNameSize = document.getElementById('itemNameSize').value || 28;
     const qtySize = document.getElementById('qtySize').value || 24;
     const baseTextSize = document.getElementById('baseTextSize').value || 16;
     const gapSize = document.getElementById('gapSize').value || 16;
 
-    // 圖片
     const showImage = document.getElementById('showImage').checked;
     const imgSrc = document.getElementById('imageUpload').dataset.src || document.getElementById('imageUrl').value || 'https://via.placeholder.com/400x200?text=無實景圖';
     document.getElementById('imageInputSection').style.display = showImage ? 'block' : 'none';
 
-    // 提醒
     const showNote = document.getElementById('showNote').checked;
     const specialNote = document.getElementById('specialNote').value;
     document.getElementById('noteContainer').style.display = showNote ? 'block' : 'none';
 
-    // 生成左欄物品清單 HTML (多物品列表排版)
     let multiItemsHtml = multiItems.map(item => `
         <div class="multi-item-row flex flex-col" style="gap: ${gapSize/4}px;">
             <div class="text-gray-800 font-black" style="font-size: ${itemNameSize}px; line-height: 1.2;">${item.name}</div>
@@ -348,7 +353,6 @@
         </div>
     `).join('');
 
-    // 生成收納順序 HTML
     let orderHtml = orderData.map((item, idx) => `
       <div class="flex items-center gap-3 p-2 rounded ${item.isTarget ? 'bg-teal-50 border border-teal-200' : 'bg-gray-50'}" style="font-size: ${baseTextSize}px;">
         <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${item.isTarget ? 'bg-teal-600 text-white' : 'bg-gray-300 text-gray-700'}">${idx + 1}</div>
@@ -356,7 +360,6 @@
       </div>
     `).join('');
 
-    // 生成其他儲位 HTML
     let locHtml = "";
     if (noOtherLocs) {
         locHtml = `<div class="p-3 bg-gray-100 text-gray-500 rounded border border-gray-200 text-center font-bold" style="font-size: ${baseTextSize}px;">🚫 本櫃限定，無其他儲放區</div>`;
@@ -372,20 +375,15 @@
     const html = `
       <div class="h-full flex flex-col relative bg-white">
         
-        <!-- 頂部櫃位標題 -->
         <div class="border-b-4 border-teal-600 pb-2 shrink-0" style="margin-bottom: ${gapSize}px;">
           <div class="inline-block bg-teal-500 text-white px-6 py-2 rounded-t-lg rounded-br-lg font-bold shadow-sm" style="font-size: ${cabinetNameSize}px;">
             📍 ${cabinetName}
           </div>
         </div>
 
-        <!-- 內容雙欄配置 -->
         <div class="flex flex-1 min-h-0" style="gap: ${gapSize}px;">
           
-          <!-- 左欄：多物品清單清單 + 提醒 -->
           <div class="w-1/2 flex flex-col h-full overflow-hidden" style="gap: ${gapSize}px;">
-             
-             <!-- 物品列表區 (可滾動或彈性撐開) -->
              <div class="flex-1 overflow-y-auto pr-2 border-2 border-blue-100 bg-white rounded-xl p-4 shadow-inner">
                 ${multiItemsHtml}
              </div>
@@ -398,9 +396,7 @@
              ` : ''}
           </div>
 
-          <!-- 右欄：圖片、收納順序、其他區 -->
           <div class="w-1/2 flex flex-col h-full overflow-hidden" style="gap: ${gapSize}px;">
-            
             ${showImage ? `
             <div class="shrink-0 h-40 border-2 border-gray-200 rounded-xl p-1 flex items-center justify-center overflow-hidden bg-gray-50">
               <img src="${imgSrc}" class="max-h-full max-w-full object-contain mix-blend-multiply">
@@ -420,7 +416,6 @@
               </div>
               <div class="overflow-y-auto pr-1">${locHtml}</div>
             </div>
-
           </div>
         </div>
       </div>
@@ -451,7 +446,6 @@
   function updateOrderText(idx, val) { orderData[idx].text = val; updatePreview(); }
   function setTargetLoc(idx) { orderData.forEach((item, i) => item.isTarget = (i === idx)); updatePreview(); }
 
-  // --- 其他儲位列表邏輯 ---
   function renderLocList() {
     const list = document.getElementById('locList');
     list.innerHTML = locData.map((loc, idx) => `
@@ -468,7 +462,6 @@
   function updateLocName(idx, val) { locData[idx].name = val; updatePreview(); }
   function updateLocQty(idx, val) { locData[idx].qty = val; updatePreview(); }
 
-  // --- 圖片上傳邏輯 ---
   function handleImageUpload(e) {
     const file = e.target.files[0];
     if (file) {
@@ -482,7 +475,6 @@
     updatePreview();
   }
 
-  // --- 輸出與列印邏輯 ---
   function downloadPreviewPNG() {
     html2canvas(document.getElementById('livePreview'), { scale: 2 }).then(canvas => {
       const link = document.createElement('a');
@@ -497,8 +489,66 @@
     const cabinet = document.getElementById('cabinetName').value;
     const name = multiItems.length > 1 ? `[組合] ${multiItems[0].name} 等${multiItems.length}項` : multiItems[0].name;
     
-    completedLabels.push({ id: Date.now(), name, cabinet, html });
+    const rawState = {
+      cabinetName: cabinet,
+      cabinetNameSize: document.getElementById('cabinetNameSize').value,
+      itemNameSize: document.getElementById('itemNameSize').value,
+      qtySize: document.getElementById('qtySize').value,
+      baseTextSize: document.getElementById('baseTextSize').value,
+      gapSize: document.getElementById('gapSize').value,
+      multiItems: JSON.parse(JSON.stringify(multiItems)),
+      showImage: document.getElementById('showImage').checked,
+      imageSrc: document.getElementById('imageUpload').dataset.src || '',
+      imageUrl: document.getElementById('imageUrl').value,
+      noOtherLocs: document.getElementById('noOtherLocsFlag').checked,
+      locData: JSON.parse(JSON.stringify(locData)),
+      orderData: JSON.parse(JSON.stringify(orderData)),
+      showNote: document.getElementById('showNote').checked,
+      specialNote: document.getElementById('specialNote').value
+    };
+    
+    completedLabels.push({ id: Date.now(), name, cabinet, html, rawState });
     renderQueueList();
+  }
+
+  function editQueueItem(idx) {
+    const item = completedLabels[idx];
+    const state = item.rawState;
+
+    document.getElementById('cabinetName').value = state.cabinetName;
+    document.getElementById('cabinetNameSize').value = state.cabinetNameSize;
+    document.getElementById('itemNameSize').value = state.itemNameSize;
+    document.getElementById('qtySize').value = state.qtySize;
+    document.getElementById('baseTextSize').value = state.baseTextSize;
+    document.getElementById('gapSize').value = state.gapSize;
+
+    multiItems = JSON.parse(JSON.stringify(state.multiItems));
+    renderMultiItems();
+
+    document.getElementById('showImage').checked = state.showImage;
+    if (state.imageSrc) {
+      document.getElementById('imageUpload').dataset.src = state.imageSrc;
+    } else {
+      delete document.getElementById('imageUpload').dataset.src;
+    }
+    document.getElementById('imageUrl').value = state.imageUrl;
+
+    document.getElementById('noOtherLocsFlag').checked = state.noOtherLocs;
+    locData = JSON.parse(JSON.stringify(state.locData));
+    renderLocList();
+    toggleNoOtherLocs(false);
+
+    orderData = JSON.parse(JSON.stringify(state.orderData));
+    renderOrderList();
+
+    document.getElementById('showNote').checked = state.showNote;
+    document.getElementById('specialNote').value = state.specialNote;
+
+    completedLabels.splice(idx, 1);
+    renderQueueList();
+    updatePreview();
+    
+    document.querySelector('.w-1\\/3.overflow-y-auto').scrollTo(0,0);
   }
 
   function renderQueueList() {
@@ -517,7 +567,10 @@
                 <span class="font-bold text-gray-700">${item.name}</span>
             </div>
         </label>
-        <button onclick="removeQueueItem(${idx})" class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-xs font-bold">刪除</button>
+        <div class="flex gap-1 shrink-0">
+            <button onclick="editQueueItem(${idx})" class="text-blue-600 hover:bg-blue-100 px-2 py-1 rounded text-xs font-bold transition">返回修正</button>
+            <button onclick="removeQueueItem(${idx})" class="text-red-500 hover:bg-red-100 px-2 py-1 rounded text-xs font-bold transition">刪除</button>
+        </div>
       </div>
     `).join('');
   }
@@ -572,6 +625,70 @@
         printArea.appendChild(page);
     }
     window.print();
+  }
+
+  // --- Excel 匯入修復 ---
+  function handleExcelUpload(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+        
+        importedData = json;
+        const sel = document.getElementById('todoList');
+        sel.innerHTML = '<option value="">-- 請選擇待處理項目 --</option>';
+        json.forEach((row, index) => {
+          let cabinet = row['櫃位'] || row['櫃位名稱'] || '未知櫃位';
+          let item = row['物品'] || row['物品名稱'] || '未知物品';
+          sel.innerHTML += `<option value="${index}">[${cabinet}] ${item}</option>`;
+        });
+        sel.classList.remove('hidden');
+        alert(`成功匯入 ${json.length} 筆資料！`);
+      } catch (err) { alert("讀取 Excel 失敗。\n錯誤訊息: " + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function loadTodoItem(idx) {
+    if(idx === "") return;
+    const data = importedData[idx];
+    
+    document.getElementById('cabinetName').value = data['櫃位'] || data['櫃位名稱'] || '';
+    
+    // 將 Excel 匯入的單一物品轉換為多物品陣列格式
+    let itemName = data['物品'] || data['物品名稱'] || '';
+    let cabinetQty = data['本櫃數量'] || '';
+    let totalQty = data['全部櫃位總量'] || data['總數量'] || '';
+    multiItems = [{ name: itemName, cabinetQty: cabinetQty, totalQty: totalQty }];
+    renderMultiItems();
+    
+    let otherStr = data['其他櫃位與數量'] || data['其他儲放櫃位與數量'] || '';
+    locData = [];
+    if(otherStr && !otherStr.includes('無其他')) {
+      // 避免換行字元跳脫錯誤，使用正則分割
+      const parts = otherStr.split(/\r?\n/);
+      parts.forEach(p => {
+        let sp = p.split(/：|:/);
+        if(sp.length >= 2) locData.push({ name: sp[0].trim(), qty: sp[1].trim() });
+      });
+      document.getElementById('noOtherLocsFlag').checked = false;
+    } else {
+      document.getElementById('noOtherLocsFlag').checked = true;
+    }
+    
+    renderLocList();
+    toggleNoOtherLocs(false);
+    
+    orderData = [{ text: document.getElementById('cabinetName').value + " (本櫃)", isTarget: true }];
+    locData.forEach(l => { orderData.push({ text: l.name, isTarget: false }); });
+    renderOrderList();
+    
+    updatePreview();
   }
 
   window.onload = init;
