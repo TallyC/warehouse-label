@@ -931,7 +931,7 @@
           if(/^\s*(<!doctype|<html)/i.test(text)) throw new Error('收到網頁而非 CSV，請確認指定分頁已公開或發布');
           
           const workbook = XLSX.read(text, {type: 'string', raw: true});
-          const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ''});
+          const json = sheetRowsToRecords(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ''}));
           processImportedJson(json);
       } catch (err) {
           alert("雲端讀取失敗。請確認連結是否為發布的 CSV 格式。\n錯誤細節：" + err.message);
@@ -949,13 +949,36 @@
           ? XLSX.read(new TextDecoder('utf-8').decode(data), {type: 'string', raw: true})
           : XLSX.read(data, {type: 'array'});
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+        const json = sheetRowsToRecords(XLSX.utils.sheet_to_json(worksheet, {header: 1, defval: ''}));
         processImportedJson(json);
       } catch (err) { alert("讀取 Excel 失敗。\n錯誤訊息: " + err.message); }
     };
     reader.readAsArrayBuffer(file);
   }
 
+  function sheetRowsToRecords(rows) {
+      const itemHeaders = ['物品', '物品名稱', '品名', 'Item'];
+      const headerIndex = rows.findIndex(row => row.some(cell => itemHeaders.includes(String(cell).trim())) && row.some(cell => ['櫃位', '櫃位名稱', 'Cabinet', '各櫃位與數量', '各櫃位數量', '位置'].includes(String(cell).trim())));
+      if(headerIndex < 0) throw new Error('找不到物品與櫃位欄位；請確認選擇庫存或盤點總覽分頁');
+      const headers = rows[headerIndex].map(h => String(h).trim());
+      const result = [];
+      rows.slice(headerIndex + 1).forEach(cells => {
+          const row = Object.fromEntries(headers.map((h,i) => [h, cells[i] ?? '']));
+          const name = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'];
+          if(!name) return;
+          const locations = row['各櫃位與數量'] ?? row['各櫃位數量'];
+          if(locations !== undefined) {
+              const entries = String(locations).split(/\r?\n/).map(p => p.trim()).filter(Boolean).map(p => {
+                  const match = p.match(/^(.+?)\s*[：:]\s*(.*)$/);
+                  if(!match) throw new Error('無法辨識櫃位與數量：' + p);
+                  return {name: match[1].trim(), qty: match[2].trim()};
+              });
+              entries.forEach((entry, index) => result.push({...row, '櫃位': entry.name, '本櫃數量': entry.qty, '全部櫃位總量': String(row['總數量'] ?? '') + (row['單位'] ? ' ' + row['單位'] : ''), '其他櫃位與數量': entries.filter((_,i) => i !== index).map(e => e.name + '：' + e.qty).join('\n')}));
+          } else result.push({...row, '櫃位': row['櫃位'] ?? row['櫃位名稱'] ?? row['Cabinet'] ?? row['位置'] ?? ''});
+      });
+      if(!result.length) throw new Error('指定分頁沒有可載入的物品資料');
+      return result;
+  }
   function processImportedJson(json) {
       importedData = json;
       const sel = document.getElementById('todoList');
@@ -964,7 +987,7 @@
         let cabinet = row['櫃位'] || row['櫃位名稱'] || row['Cabinet'] || '未知櫃位';
         let item = row['物品'] || row['物品名稱'] || row['品名'] || row['Item'] || '未知物品';
         let displayItem = String(item).split(/\r?\n/)[0].trim(); 
-        sel.innerHTML += `<option value="${index}">[${escapeHtml(cabinet)}] ${escapeHtml(displayItem)}</option>`;
+        sel.innerHTML += `<option value="${index}">[${escapeHtml(cabinet)}] ${escapeHtml(displayItem)}${row["顏色"] ? "（" + escapeHtml(row["顏色"]) + "）" : ""}</option>`;
       });
       document.getElementById('todoContainer').classList.remove('hidden');
       alert(`成功匯入 ${json.length} 筆資料！請由下方下拉選單操作。`);
