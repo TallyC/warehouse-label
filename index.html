@@ -462,7 +462,7 @@
     // 完全移除 Flex Gap，改用 margin-bottom 與明確的 width 佔比，確保 html2canvas 100% 準確抓取
     let multiItemsInnerHtml = multiItems.map(item => `
         <div class="multi-item-row" style="margin-bottom: ${gapSize/2}px;">
-            <div class="text-gray-800 font-black mb-2" style="font-size: ${itemNameSize}px; line-height: 1.2; overflow-wrap: anywhere;">${escapeHtml(item.name)}${showColor && String(item.color || '').trim() ? `<span class="text-gray-600 font-medium" style="font-size: ${baseTextSize}px; margin-left: 0.5em;">顏色：${escapeHtml(item.color)}</span>` : ''}</div>
+            <div class="text-gray-800 font-black mb-2 item-title-row" style="display: flex; flex-wrap: nowrap; align-items: baseline; gap: 0.4em; font-size: ${itemNameSize}px; line-height: 1.2;"><span style="min-width: 0; overflow-wrap: anywhere;">${escapeHtml(item.name)}</span>${showColor && String(item.color || '').trim() ? `<span class="text-gray-600 font-medium item-title-color" style="flex-shrink: 0; white-space: nowrap; font-size: ${baseTextSize}px;">顏色：${escapeHtml(item.color)}</span>` : ''}</div>
             ${showQty ? `
             <div class="flex justify-between items-center">
                 <div class="bg-yellow-50 border-2 border-yellow-400 rounded-lg px-3 py-1 flex items-center justify-between shadow-sm" style="width: 48%;">
